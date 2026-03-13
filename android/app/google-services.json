@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "533950970964",
+    "project_id": "gear-up-a86c6",
+    "storage_bucket": "gear-up-a86c6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:533950970964:android:68b55779c0da75588b81c1",
+        "android_client_info": {
+          "package_name": "com.sim.gear_up"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDLZAbVmUBoliL3FMfKBo8QbzbOP7mDysk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
