@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // 🔥 المكتبة دي عشان نجبره يكتب أرقام بس 🔥
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
 import 'login_screen.dart';
@@ -79,7 +80,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const OnboardingSurveyScreen()), (route) => false);
               }
               else if (state is AuthNeedsVerification) {
-                // 🔥 بنبعت إيميل الترحيب في الخلفية عن طريق السيرفر بدون await 🔥
                 _sendWelcomeEmail(_emailController.text.trim(), _nameController.text.trim());
 
                 Navigator.pushAndRemoveUntil(
@@ -118,6 +118,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       _buildLabel(AppLang.tr(context, 'email') ?? "Email", isDark),
                       TextFormField(
                         controller: _emailController,
+                        keyboardType: TextInputType.emailAddress, // 🔥 بيفتح كيبورد الإيميل الإنجليزي أوتوماتيك
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                         validator: (value) {
                           if (value == null || value.isEmpty) return 'Please enter your email';
@@ -132,9 +133,24 @@ class _SignupScreenState extends State<SignupScreen> {
                       TextFormField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
+                        // 🔥 دي بتجبر الكيبورد واليوزر إنه يكتب أرقام إنجليزي فقط 🔥
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        maxLength: 11, // بيمنع اليوزر إنه يكتب أكتر من 11 رقم
+                        // 🔥 ده بيخلي النص دايماً من اليسار لليمين مهما كانت لغة الموبايل
+                        textDirection: TextDirection.ltr,
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                        validator: (value) => value!.isEmpty ? 'Please enter your phone number' : null,
-                        decoration: _inputDecoration(AppLang.tr(context, 'phone_hint') ?? "Enter your phone number", Icons.phone_outlined, isDark),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'يرجى إدخال رقم الهاتف';
+                          if (value.length != 11) return 'رقم الهاتف يجب أن يكون 11 رقماً';
+                          if (!value.startsWith('01')) return 'يجب أن يبدأ رقم الهاتف بـ 01';
+                          return null;
+                        },
+                        decoration: _inputDecoration(
+                          // \u200E ده رمز سحري بيخلي الأرقام معدولة في العربي
+                            "\u200E01012345678",
+                            Icons.phone_outlined,
+                            isDark
+                        ).copyWith(counterText: ""), // عشان يخفي العداد بتاع الحروف (0/11) اللي بيظهر تحت الحقل
                       ),
                       const SizedBox(height: 16),
 

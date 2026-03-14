@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:showcaseview/showcaseview.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
 import '../../../core/local_storage/cache_helper.dart';
 import '../widgets/car_card.dart';
+import '../widgets/part_card.dart';
 import '../widgets/filters_bottom_sheet.dart';
 import 'search_screen.dart';
 import 'view_all_cars_screen.dart';
@@ -18,24 +20,37 @@ import '../../marketplace/cubit/market_cubit.dart';
 import '../../marketplace/cubit/market_state.dart';
 import '../../profile/screens/start_selling_screen.dart';
 import '../../marketplace/models/car_model.dart';
-import '../../marketplace/models/news_model.dart';
 import '../../auth/screens/login_screen.dart';
+// 🔥 AppTourKeys و LuxuriousShowcase موجودين في main_layout 🔥
+import 'main_layout.dart';
 
-class HomeScreen extends StatefulWidget {
+// =================================================================
+// HomeScreen - بتلف الـ content بـ ShowCaseWidget عشان الجولة تشتغل
+// =================================================================
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  Widget build(BuildContext context) {
+    // 🔥 ShowCaseWidget موجود في main_layout - مش محتاجينه هنا 🔥
+    return const HomeScreenContent();
+  }
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenContent extends StatefulWidget {
+  const HomeScreenContent({super.key});
+
+  @override
+  State<HomeScreenContent> createState() => _HomeScreenContentState();
+}
+
+class _HomeScreenContentState extends State<HomeScreenContent> {
   final ScrollController _newCarsScrollController = ScrollController();
   final ScrollController _usedCarsScrollController = ScrollController();
   final ScrollController _newsScrollController = ScrollController();
   final ScrollController _mainScrollController = ScrollController();
   final ScrollController _promotedScrollController = ScrollController();
   final ScrollController _topRatedScrollController = ScrollController();
-
   final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey = GlobalKey<RefreshIndicatorState>();
 
   bool _showQuickMenuIcon = false;
@@ -71,7 +86,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _startQuickMenuTimer();
 
-    // Controllers للأقسام الثابتة
     _newCarsScrollController.addListener(() {
       if (_newCarsScrollController.position.pixels >= _newCarsScrollController.position.maxScrollExtent - 150) {
         bool added = _injectMoreCarsLocally(_homeNewCars, marketCubit.newCarsList, fallback: marketCubit.carsList);
@@ -104,7 +118,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
 
-    // سكرول الشاشة الرأسي (بيولد الأقسام الدايناميك)
     _mainScrollController.addListener(() {
       if (_mainScrollController.position.pixels >= _mainScrollController.position.maxScrollExtent - 200) {
         if (marketCubit.isFilterActive) {
@@ -122,7 +135,37 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // دالة حقن الداتا للأقسام الثابتة فقط
+  // =================================================================
+  // 🔥 الجولة - بتشتغل بس أول مرة يفتح اليوزر الابليكيشن 🔥
+  // =================================================================
+  void _checkAndStartTour(BuildContext context) {
+    bool isFirstTime = CacheHelper.getData(key: 'gearup_tour_v65') ?? true;
+    print('🎯 Tour check: isFirstTime=$isFirstTime');
+    if (!isFirstTime) return;
+
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted) return;
+      print('🎯 Tour starting now...');
+
+      if (_mainScrollController.hasClients) {
+        _mainScrollController.jumpTo(0);
+      }
+
+      // بس الـ keys اللي موجودة فعلاً في الهوم سكرين
+      List<GlobalKey> guaranteedKeys = [
+        AppTourKeys.searchKey,
+        AppTourKeys.filterKey,
+        AppTourKeys.savedItemsKey,
+        AppTourKeys.savedPartsKey,
+        AppTourKeys.nearbyKey,
+      ];
+
+      print('🎯 Keys count: ${guaranteedKeys.length}');
+      ShowCaseWidget.of(context).startShowCase(guaranteedKeys);
+      CacheHelper.saveData(key: 'gearup_tour_v65', value: false);
+    });
+  }
+
   bool _injectMoreCarsLocally(List<CarModel> targetList, Iterable<CarModel> primarySource, {Iterable<CarModel>? fallback, int count = 4, bool isPromotedSection = false}) {
     final cubit = context.read<MarketCubit>();
     bool isAllowed(CarModel c) {
@@ -140,7 +183,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return false;
   }
 
-  // 🔥 الحل السحري للأقسام الدايناميك: دالة بتفلتر من المخزن العام وتحدث الذاكرة 🔥
   ScrollController _getDynamicController(int index, MarketCubit cubit, String type) {
     if (!_dynamicScrollControllers.containsKey(index)) {
       final controller = ScrollController();
@@ -150,27 +192,21 @@ class _HomeScreenState extends State<HomeScreen> {
             if (!cubit.isFetchingMoreNews) cubit.fetchMoreNews();
           } else {
             List<CarModel> currentItems = List<CarModel>.from(cubit.dynamicBottomSections[index]['items']);
-
-            // بنجيب 4 عربيات طازة بناءً على نوع القسم، وميكنوش اتعرضوا قبل كده
             var newCars = cubit.carsList.where((c) {
-              if (currentItems.any((t) => t.id == c.id)) return false; // موجودة في الصف ده؟ ارفض
-              if (cubit.shownDynamicCarIds.contains(c.id)) return false; // اتعرضت في صف دايناميك تاني؟ ارفض
-              if (type == 'top_rated' && c.rating < 4.0) return false; // لو توب ريتيد لازم تقييم عالي
-              if (type != 'promoted' && cubit.promotedCarsList.any((p) => p.id == c.id)) return false; // امنع البروموتيد من العادي
-              return true; // عديها
+              if (currentItems.any((t) => t.id == c.id)) return false;
+              if (cubit.shownDynamicCarIds.contains(c.id)) return false;
+              if (type == 'top_rated' && c.rating < 4.0) return false;
+              if (type != 'promoted' && cubit.promotedCarsList.any((p) => p.id == c.id)) return false;
+              return true;
             }).take(4).toList();
 
             if (newCars.isNotEmpty) {
               setState(() {
                 currentItems.addAll(newCars);
                 cubit.dynamicBottomSections[index]['items'] = currentItems;
-                // 🔥 تحديث الذاكرة عشان العربيات دي متتكررش في الصف اللي تحته 🔥
-                for (var car in newCars) {
-                  cubit.shownDynamicCarIds.add(car.id);
-                }
+                for (var car in newCars) { cubit.shownDynamicCarIds.add(car.id); }
               });
             } else {
-              // اللوكال الطازة خلص، كلم الـ API
               if (type != 'promoted' && type != 'top_rated' && !cubit.isFetchingExternal) {
                 cubit.fetchExternalCarsData();
               }
@@ -197,20 +233,17 @@ class _HomeScreenState extends State<HomeScreen> {
     else { var top15 = sorted.take(15).toList()..shuffle(); var rest = sorted.skip(15).toList(); return [...top15, ...rest]; }
   }
 
-  // تحديث الشاشة لما الـ API يرجع
   void _appendNewItemsToHomeLists(MarketCubit cubit) {
     setState(() {
       _injectMoreCarsLocally(_homePromotedCars, cubit.promotedCarsList.where((c) => c.itemType == 'type_car'), isPromotedSection: true);
       _injectMoreCarsLocally(_homeNewCars, cubit.newCarsList, fallback: cubit.carsList);
       _injectMoreCarsLocally(_homeUsedCars, cubit.usedCarsList, fallback: cubit.carsList);
 
-      // تحديث الأقسام الدايناميك بنفس اللوجيك الصارم
       for (int i = 0; i < cubit.dynamicBottomSections.length; i++) {
         var section = cubit.dynamicBottomSections[i];
         String type = section['type'];
         if (type != 'news') {
           List<CarModel> currentItems = List<CarModel>.from(section['items']);
-
           var newCars = cubit.carsList.where((c) {
             if (currentItems.any((t) => t.id == c.id)) return false;
             if (cubit.shownDynamicCarIds.contains(c.id)) return false;
@@ -222,9 +255,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (newCars.isNotEmpty) {
             currentItems.addAll(newCars);
             cubit.dynamicBottomSections[i]['items'] = currentItems;
-            for (var car in newCars) {
-              cubit.shownDynamicCarIds.add(car.id);
-            }
+            for (var car in newCars) { cubit.shownDynamicCarIds.add(car.id); }
           }
         }
       }
@@ -281,7 +312,12 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: BlocConsumer<MarketCubit, MarketState>(
           listener: (context, state) {
-            if (state is GetCarsSuccess) { setState(() {}); _loadTopRatedCars(); }
+            if (state is GetCarsSuccess) {
+              setState(() {});
+              _loadTopRatedCars();
+              // 🔥 لو الكروت كانت فاضية وجت داتا دلوقتي نشغل الجولة 🔥
+              _checkAndStartTour(context);
+            }
             else if (state is AddCarSuccess) { _initializeHomeLists(context.read<MarketCubit>()); _loadTopRatedCars(); }
             else if (state is SearchCarsSuccess || state is FetchExternalCarsSuccess) { _appendNewItemsToHomeLists(context.read<MarketCubit>()); }
           },
@@ -299,8 +335,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   if (cubit.isFilterActive) ...[
                     if (state is FilterCarsLoading && cubit.filteredCarsView.isEmpty) const Padding(padding: EdgeInsets.only(top: 50), child: Center(child: CircularProgressIndicator(color: AppColors.primary)))
-                    else if (cubit.filteredCarsView.isEmpty) Padding(padding: const EdgeInsets.only(top: 50), child: Center(child: Column(children: [Icon(Icons.search_off, size: 64, color: AppColors.textHint.withOpacity(0.3)), const SizedBox(height: 16), Text(AppLang.tr(context, 'no_cars_to_show') ?? "لا توجد سيارات مطابقة", style: const TextStyle(color: AppColors.textHint, fontWeight: FontWeight.bold))])) )
-                    else ...[ ListView.separated(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: cubit.filteredCarsView.where((c) => c.itemType == 'type_car').length, separatorBuilder: (context, index) => const SizedBox(height: 24), itemBuilder: (context, index) { final filteredCar = cubit.filteredCarsView.where((c) => c.itemType == 'type_car').toList()[index]; return CarCard(car: filteredCar, isPromoted: false); },), if (state is FilterCarsLoadingMore) const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator(color: AppColors.primary))) ]
+                    else if (cubit.filteredCarsView.isEmpty) Padding(padding: const EdgeInsets.only(top: 50), child: Center(child: Column(children: [Icon(Icons.search_off, size: 64, color: AppColors.textHint.withOpacity(0.3)), const SizedBox(height: 16), Text(AppLang.tr(context, 'no_cars_to_show') ?? "لا توجد نتائج مطابقة", style: const TextStyle(color: AppColors.textHint, fontWeight: FontWeight.bold))])) )
+                    else ...[
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: cubit.filteredCarsView.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 24),
+                          itemBuilder: (context, index) {
+                            final filteredItem = cubit.filteredCarsView[index];
+                            if (filteredItem.itemType == 'type_spare_part') {
+                              return PartCard(partItem: filteredItem, isPromoted: false);
+                            }
+                            return CarCard(car: filteredItem, isPromoted: false);
+                          },
+                        ),
+                        if (state is FilterCarsLoadingMore) const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator(color: AppColors.primary)))
+                      ]
                   ]
                   else ...[
                     _buildQuickActions(context, isDark),
@@ -368,29 +419,60 @@ class _HomeScreenState extends State<HomeScreen> {
             );
 
             return Stack(
-              children: [
-                Column(
-                  children: [
-                    Padding(padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8), child: _buildTopBar(context, isDark)),
-                    if (cubit.isFilterActive)
-                      Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [const Icon(Icons.tune, color: Colors.white, size: 20), const SizedBox(width: 8), Text(AppLang.tr(context, 'filtered_results') ?? 'Filtered Results', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15))]), GestureDetector(onTap: () => cubit.clearFilters(), child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), border: Border.all(color: Colors.white.withOpacity(0.4)), borderRadius: BorderRadius.circular(12)), child: Row(children: [const Icon(Icons.close, color: Colors.white, size: 14), const SizedBox(width: 4), Text(AppLang.tr(context, 'clear_filter') ?? 'Clear', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])) )]))),
+                children: [
+            Column(
+            children: [
+            Padding(padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8), child: _buildTopBar(context, isDark)),
+            if (cubit.isFilterActive)
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [const Icon(Icons.tune, color: Colors.white, size: 20), const SizedBox(width: 8), Text(AppLang.tr(context, 'filtered_results') ?? 'Filtered Results', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15))]), GestureDetector(onTap: () => cubit.clearFilters(), child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), border: Border.all(color: Colors.white.withOpacity(0.4)), borderRadius: BorderRadius.circular(12)), child: Row(children: [const Icon(Icons.close, color: Colors.white, size: 14), const SizedBox(width: 4), Text(AppLang.tr(context, 'clear_filter') ?? 'Clear', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])) )]))),
 
-                    Expanded(
-                      child: cubit.isFilterActive
-                          ? mainScrollableContent
-                          : RefreshIndicator(
-                          key: _refreshIndicatorKey,
-                          color: AppColors.primary,
-                          backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
-                          strokeWidth: 3.0,
-                          onRefresh: _handleRefresh,
-                          child: mainScrollableContent
-                      ),
-                    ),
-                  ],
-                ),
-                AnimatedPositioned(duration: Duration(milliseconds: _isDraggingQuickMenu ? 0 : 300), curve: Curves.easeOutCubic, left: currentX, top: _quickMenuPosition.dy, child: AnimatedOpacity(duration: const Duration(milliseconds: 300), opacity: _showQuickMenuIcon ? 1.0 : 0.0, child: GestureDetector(onPanStart: (details) { _quickMenuTimer?.cancel(); setState(() { _isDraggingQuickMenu = true; _isQuickMenuCollapsed = false; }); }, onPanUpdate: (details) { setState(() { double newX = _quickMenuPosition.dx + details.delta.dx; double newY = _quickMenuPosition.dy + details.delta.dy; newX = newX.clamp(0.0, screenWidth - iconContainerSize); newY = newY.clamp(120.0, screenHeight - 120.0); _quickMenuPosition = Offset(newX, newY); }); }, onPanEnd: (details) { setState(() { _isDraggingQuickMenu = false; double snapX = (_quickMenuPosition.dx > screenWidth / 2) ? screenWidth - iconContainerSize : 0.0; _quickMenuPosition = Offset(snapX, _quickMenuPosition.dy); _startQuickMenuTimer(); }); }, onTap: () { if (_isQuickMenuCollapsed) { setState(() { _isQuickMenuCollapsed = false; _startQuickMenuTimer(); }); } else { _showPremiumQuickMenu(context, isDark); _startQuickMenuTimer(); } }, child: ClipRRect(borderRadius: BorderRadius.horizontal(left: Radius.circular(isLeft && _isQuickMenuCollapsed ? 0 : 16), right: Radius.circular(!isLeft && _isQuickMenuCollapsed ? 0 : 16)), child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12), child: AnimatedContainer(duration: const Duration(milliseconds: 300), width: _isQuickMenuCollapsed ? 56.0 : iconContainerSize, height: iconContainerSize, decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27).withOpacity(0.85) : Colors.white.withOpacity(0.8), border: Border.all(color: isDark ? Colors.white10 : AppColors.primary.withOpacity(0.5), width: 1.5)), child: Center(child: _isQuickMenuCollapsed ? Icon(isLeft ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_new_rounded, color: AppColors.primary, size: 20) : const Icon(Icons.widgets_rounded, color: AppColors.primary, size: 28)))))))),
-              ],
+            Expanded(
+            child: cubit.isFilterActive
+            ? mainScrollableContent
+                : RefreshIndicator(
+            key: _refreshIndicatorKey,
+            color: AppColors.primary,
+            backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+            strokeWidth: 3.0,
+            onRefresh: _handleRefresh,
+            child: mainScrollableContent
+            ),
+            ),
+            ],
+            ),
+
+            // 🔥 الـ Quick Menu Button مع الـ Showcase 🔥
+            AnimatedPositioned(
+            duration: Duration(milliseconds: _isDraggingQuickMenu ? 0 : 300),
+            curve: Curves.easeOutCubic,
+            left: currentX,
+            top: _quickMenuPosition.dy,
+            child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 300),
+            opacity: _showQuickMenuIcon ? 1.0 : 0.0,
+            child: GestureDetector(
+            onPanStart: (details) { _quickMenuTimer?.cancel(); setState(() { _isDraggingQuickMenu = true; _isQuickMenuCollapsed = false; }); },
+            onPanUpdate: (details) { setState(() { double newX = _quickMenuPosition.dx + details.delta.dx; double newY = _quickMenuPosition.dy + details.delta.dy; newX = newX.clamp(0.0, screenWidth - iconContainerSize); newY = newY.clamp(120.0, screenHeight - 120.0); _quickMenuPosition = Offset(newX, newY); }); },
+            onPanEnd: (details) { setState(() { _isDraggingQuickMenu = false; double snapX = (_quickMenuPosition.dx > screenWidth / 2) ? screenWidth - iconContainerSize : 0.0; _quickMenuPosition = Offset(snapX, _quickMenuPosition.dy); _startQuickMenuTimer(); }); },
+            onTap: () { if (_isQuickMenuCollapsed) { setState(() { _isQuickMenuCollapsed = false; _startQuickMenuTimer(); }); } else { _showPremiumQuickMenu(context, isDark); _startQuickMenuTimer(); } },
+            child: ClipRRect(
+            borderRadius: BorderRadius.horizontal(left: Radius.circular(isLeft && _isQuickMenuCollapsed ? 0 : 16), right: Radius.circular(!isLeft && _isQuickMenuCollapsed ? 0 : 16)),
+            child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: _isQuickMenuCollapsed ? 56.0 : iconContainerSize,
+            height: iconContainerSize,
+            decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27).withOpacity(0.85) : Colors.white.withOpacity(0.8), border: Border.all(color: isDark ? Colors.white10 : AppColors.primary.withOpacity(0.5), width: 1.5)),
+            child: Center(child: _isQuickMenuCollapsed ? Icon(isLeft ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_new_rounded, color: AppColors.primary, size: 20) : const Icon(Icons.widgets_rounded, color: AppColors.primary, size: 28)),
+            ),
+            ),
+            ),
+            ),
+            ),
+            ),
+
+            ],
             );
           },
         ),
@@ -403,7 +485,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPromotedSection(BuildContext context, bool isDark, List cars, bool isLoading) {
-    return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: isDark ? const Color(0xFF2C2416) : const Color(0xFFFFF9E6), borderRadius: BorderRadius.circular(28)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [Text(AppLang.tr(context, 'promoted') ?? 'Promoted', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFD35400))), const SizedBox(width: 12), Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: isDark ? const Color(0xFFFF9800) : const Color(0xFFF39C12), borderRadius: BorderRadius.circular(12)), child: Text(AppLang.tr(context, 'featured_listings') ?? 'Featured', style: TextStyle(color: isDark ? Colors.black87 : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))]), GestureDetector(onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'promoted') ?? 'Promoted'))); }, child: Container(padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8), color: Colors.transparent, child: Row(children: [Text(AppLang.tr(context, 'view_more') ?? 'More', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.secondary, fontSize: 13)), const SizedBox(width: 4), Icon(Icons.arrow_forward_ios, color: isDark ? Colors.white : AppColors.secondary, size: 12)])))]), const SizedBox(height: 4), Text(AppLang.tr(context, 'premium_listings') ?? 'Premium listings', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : AppColors.textSecondary, fontWeight: FontWeight.w500)), const SizedBox(height: 24), _buildCarList(cars, isLoading, true, controller: _promotedScrollController, isFetchingMore: isLoading), const SizedBox(height: 20), Container(width: double.infinity, decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.premiumGoldStart, AppColors.premiumGoldEnd], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16)), child: ElevatedButton.icon(onPressed: () { if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'publish_ads_feature') ?? "نشر إعلانات"); return; } Navigator.push(context, MaterialPageRoute(builder: (context) => const StartSellingScreen(initialItemType: 'type_car'))); }, icon: const Icon(Icons.add_circle_outline, color: AppColors.secondary, size: 20), label: Text(AppLang.tr(context, 'start_ad_now') ?? 'Start Ad Now', style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold, fontSize: 15)), style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14)))) ]));
+    return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: isDark ? const Color(0xFF2C2416) : const Color(0xFFFFF9E6), borderRadius: BorderRadius.circular(28)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [Text(AppLang.tr(context, 'promoted') ?? 'Promoted', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFD35400))), const SizedBox(width: 12), Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: isDark ? const Color(0xFFFF9800) : const Color(0xFFF39C12), borderRadius: BorderRadius.circular(12)), child: Text(AppLang.tr(context, 'featured_listings') ?? 'Featured', style: TextStyle(color: isDark ? Colors.black87 : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))]), GestureDetector(onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'promoted') ?? 'Promoted'))); }, child: Container(padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8), color: Colors.transparent, child: Row(children: [Text(AppLang.tr(context, 'view_more') ?? 'More', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.secondary, fontSize: 13)), const SizedBox(width: 4), Icon(Icons.arrow_forward_ios, color: isDark ? Colors.white : AppColors.secondary, size: 12)])))]), const SizedBox(height: 4), Text(AppLang.tr(context, 'premium_listings') ?? 'Premium listings', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : AppColors.textSecondary, fontWeight: FontWeight.w500)), const SizedBox(height: 24), _buildCarList(cars, isLoading, true, controller: _promotedScrollController, isFetchingMore: isLoading), const SizedBox(height: 20),
+      LuxuriousShowcase(
+        showcaseKey: AppTourKeys.addAdKey,
+        title: 'ابدأ إعلانك',
+        description: 'اضغط هنا عشان تنشر إعلان سيارتك وتوصل لآلاف المشترين.',
+        child: Container(width: double.infinity, decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.premiumGoldStart, AppColors.premiumGoldEnd], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16)), child: ElevatedButton.icon(onPressed: () { if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'publish_ads_feature') ?? "نشر إعلانات"); return; } Navigator.push(context, MaterialPageRoute(builder: (context) => const StartSellingScreen(initialItemType: 'type_car'))); }, icon: const Icon(Icons.add_circle_outline, color: AppColors.secondary, size: 20), label: Text(AppLang.tr(context, 'start_ad_now') ?? 'Start Ad Now', style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold, fontSize: 15)), style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14)))),
+      )
+    ]));
   }
 
   Widget _buildNewsList(BuildContext context, bool isDark, MarketCubit cubit, [ScrollController? controller]) {
@@ -419,18 +508,88 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildCarList(List cars, bool isLoading, bool isPromotedSection, {ScrollController? controller, bool isFetchingMore = false, bool isTopRatedSection = false}) {
     if (isLoading) return const SizedBox(height: 395, child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     if (cars.isEmpty) return SizedBox(height: 200, child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.directions_car_filled_outlined, size: 64, color: AppColors.textHint.withOpacity(0.3)), const SizedBox(height: 16), Text(AppLang.tr(context, 'no_cars_to_show') ?? "No cars to show", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textHint, fontSize: 16))])));
-    return SizedBox(height: 395, child: ListView.builder(controller: controller, scrollDirection: Axis.horizontal, physics: const BouncingScrollPhysics(), clipBehavior: Clip.none, itemCount: cars.length + (isFetchingMore && controller != null ? 1 : 0), itemBuilder: (context, index) { if (index == cars.length) return const Padding(padding: EdgeInsets.symmetric(horizontal: 20.0), child: Center(child: CircularProgressIndicator(color: AppColors.primary))); return CarCard(car: cars[index], isPromoted: isPromotedSection); }));
+    return SizedBox(height: 395, child: ListView.builder(controller: controller, scrollDirection: Axis.horizontal, physics: const BouncingScrollPhysics(), clipBehavior: Clip.none, itemCount: cars.length + (isFetchingMore && controller != null ? 1 : 0), itemBuilder: (context, index) {
+      if (index == cars.length) return const Padding(padding: EdgeInsets.symmetric(horizontal: 20.0), child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+      // 🔥 أول كارت في البروموتيد بس هياخد الـ keys عشان الجولة 🔥
+      final bool isFirstPromotedCard = isPromotedSection && index == 0;
+      return CarCard(
+        car: cars[index],
+        isPromoted: isPromotedSection,
+        saveKey: isFirstPromotedCard ? AppTourKeys.cardSaveKey : null,
+        compareKey: isFirstPromotedCard ? AppTourKeys.cardCompareKey : null,
+      );
+    }));
   }
 
+  // 🔥 Top Bar مع Showcase على البحث والفلتر 🔥
   Widget _buildTopBar(BuildContext context, bool isDark) {
-    return Row(children: [Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight), borderRadius: BorderRadius.circular(14)), child: Image.asset('assets/images/logo.png', height: 26, width: 26)), const SizedBox(width: 12), Expanded(child: GestureDetector(onTap: () { Navigator.push(context, PageRouteBuilder(pageBuilder: (context, animation, secondaryAnimation) => const SearchScreen(), transitionDuration: Duration.zero, reverseTransitionDuration: Duration.zero)); }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16), height: 52, decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight), borderRadius: BorderRadius.circular(24)), child: Row(children: [const Icon(Icons.search, color: AppColors.textHint, size: 22), const SizedBox(width: 8), Text(AppLang.tr(context, 'search_cars') ?? "Search", style: const TextStyle(color: AppColors.textHint, fontSize: 15))])))), const SizedBox(width: 12), GestureDetector(onTap: () { showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (context) => const FiltersBottomSheet()); }, child: Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.tune, color: Colors.white, size: 24)))]);
+    return Row(children: [
+      Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight), borderRadius: BorderRadius.circular(14)), child: Image.asset('assets/images/logo.png', height: 26, width: 26)),
+      const SizedBox(width: 12),
+      Expanded(child: LuxuriousShowcase(
+        showcaseKey: AppTourKeys.searchKey,
+        title: AppLang.tr(context, 'tour_search_title') ?? 'بحث سريع',
+        description: AppLang.tr(context, 'tour_search_desc') ?? 'ابحث عن أي سيارة أو قطعة غيار من هنا.',
+        child: GestureDetector(
+          onTap: () { Navigator.push(context, PageRouteBuilder(pageBuilder: (context, animation, secondaryAnimation) => const SearchScreen(), transitionDuration: Duration.zero, reverseTransitionDuration: Duration.zero)); },
+          child: Container(padding: const EdgeInsets.symmetric(horizontal: 16), height: 52, decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight), borderRadius: BorderRadius.circular(24)), child: Row(children: [const Icon(Icons.search, color: AppColors.textHint, size: 22), const SizedBox(width: 8), Text(AppLang.tr(context, 'search_cars') ?? "Search", style: const TextStyle(color: AppColors.textHint, fontSize: 15))])),
+        ),
+      )),
+      const SizedBox(width: 12),
+      LuxuriousShowcase(
+        showcaseKey: AppTourKeys.filterKey,
+        title: AppLang.tr(context, 'tour_filter_title') ?? 'فلتر النتائج',
+        description: AppLang.tr(context, 'tour_filter_desc') ?? 'فلتر النتائج براحتك عشان توصل للي بتدور عليه.',
+        child: GestureDetector(
+          onTap: () { showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (context) => const FiltersBottomSheet()); },
+          child: Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.tune, color: Colors.white, size: 24)),
+        ),
+      ),
+    ]);
   }
 
+  // 🔥 Quick Actions مع Showcase على كل زرار 🔥
   Widget _buildQuickActions(BuildContext context, bool isDark) {
-    return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildActionCard(isDark: isDark, title: AppLang.tr(context, 'saved_cars') ?? "Saved Cars", icon: Icons.favorite, iconColor: Colors.red.shade400, onTap: () { if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'view_saved_cars') ?? "عرض المحفوظات"); return; } Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedCarsScreen())); }), _buildActionCard(isDark: isDark, title: AppLang.tr(context, 'saved_parts') ?? "Saved Parts", icon: Icons.build_outlined, iconColor: AppColors.primary, onTap: () { if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'view_saved_parts') ?? "عرض المحفوظات"); return; } Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPartsScreen())); }), _buildActionCard(isDark: isDark, title: AppLang.tr(context, 'find_nearby') ?? "Nearby", icon: Icons.location_on_outlined, iconColor: const Color(0xFFE57373), onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const NearbyLocationsScreen())); })]);
+    return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      _buildActionCard(
+        isDark: isDark,
+        title: AppLang.tr(context, 'saved_cars') ?? "Saved Cars",
+        icon: Icons.favorite,
+        iconColor: Colors.red.shade400,
+        showcaseKey: AppTourKeys.savedItemsKey,
+        showcaseTitle: AppLang.tr(context, 'tour_saved_title') ?? 'السيارات المحفوظة',
+        showcaseDesc: AppLang.tr(context, 'tour_saved_desc') ?? 'هتلاقي هنا كل السيارات اللي حفظتها عشان ترجع ليها بسهولة.',
+        onTap: () { if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'view_saved_cars') ?? "عرض المحفوظات"); return; } Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedCarsScreen())); },
+      ),
+      _buildActionCard(
+        isDark: isDark,
+        title: AppLang.tr(context, 'saved_parts') ?? "Saved Parts",
+        icon: Icons.build_outlined,
+        iconColor: AppColors.primary,
+        showcaseKey: AppTourKeys.savedPartsKey,
+        showcaseTitle: AppLang.tr(context, 'tour_saved_parts_title') ?? 'قطع الغيار المحفوظة',
+        showcaseDesc: AppLang.tr(context, 'tour_saved_parts_desc') ?? 'هنا بتلاقي قطع الغيار اللي احتفظت بيها.',
+        onTap: () { if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'view_saved_parts') ?? "عرض المحفوظات"); return; } Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPartsScreen())); },
+      ),
+      _buildActionCard(
+        isDark: isDark,
+        title: AppLang.tr(context, 'find_nearby') ?? "Nearby",
+        icon: Icons.location_on_outlined,
+        iconColor: const Color(0xFFE57373),
+        showcaseKey: AppTourKeys.nearbyKey,
+        showcaseTitle: AppLang.tr(context, 'tour_nearby_title') ?? 'الأماكن القريبة',
+        showcaseDesc: AppLang.tr(context, 'tour_nearby_desc') ?? 'لاقي أقرب مراكز الصيانة والمعارض من مكانك.',
+        onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const NearbyLocationsScreen())); },
+      ),
+    ]);
   }
 
-  Widget _buildActionCard({required bool isDark, required String title, required IconData icon, required Color iconColor, required VoidCallback onTap}) {
-    return Expanded(child: GestureDetector(onTap: onTap, child: Container(margin: const EdgeInsets.symmetric(horizontal: 6), padding: const EdgeInsets.symmetric(vertical: 18), decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.02), blurRadius: 6, offset: const Offset(0, 3))]), child: Column(children: [Icon(icon, color: iconColor, size: 30), const SizedBox(height: 10), Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center)]))));
+  Widget _buildActionCard({required bool isDark, required String title, required IconData icon, required Color iconColor, required VoidCallback onTap, GlobalKey? showcaseKey, String? showcaseTitle, String? showcaseDesc}) {
+    Widget card = GestureDetector(onTap: onTap, child: Container(margin: const EdgeInsets.symmetric(horizontal: 6), padding: const EdgeInsets.symmetric(vertical: 18), decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight), borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.02), blurRadius: 6, offset: const Offset(0, 3))]), child: Column(children: [Icon(icon, color: iconColor, size: 30), const SizedBox(height: 10), Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87), textAlign: TextAlign.center)])));
+
+    if (showcaseKey != null) {
+      return Expanded(child: LuxuriousShowcase(showcaseKey: showcaseKey, title: showcaseTitle ?? '', description: showcaseDesc ?? '', child: card));
+    }
+    return Expanded(child: card);
   }
 }

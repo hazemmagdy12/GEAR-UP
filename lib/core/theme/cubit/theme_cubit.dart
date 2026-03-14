@@ -3,7 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../local_storage/cache_helper.dart';
 
 class ThemeCubit extends Cubit<ThemeMode> {
-  ThemeCubit() : super(ThemeMode.system) {
+  // 🔥 خلينا الديفولت لايت عشان السويتش ميهنجش لو مفيش حاجة متسجلة
+  ThemeCubit() : super(ThemeMode.light) {
     _loadTheme();
   }
 
@@ -12,10 +13,8 @@ class ThemeCubit extends Cubit<ThemeMode> {
 
     if (savedTheme == 'dark') {
       emit(ThemeMode.dark);
-    } else if (savedTheme == 'light') {
-      emit(ThemeMode.light);
     } else {
-      emit(ThemeMode.system);
+      emit(ThemeMode.light);
     }
   }
 
@@ -23,16 +22,14 @@ class ThemeCubit extends Cubit<ThemeMode> {
     emit(themeMode);
     if (themeMode == ThemeMode.dark) {
       CacheHelper.saveData(key: 'theme', value: 'dark');
-    } else if (themeMode == ThemeMode.light) {
-      CacheHelper.saveData(key: 'theme', value: 'light');
     } else {
-      CacheHelper.saveData(key: 'theme', value: 'system');
+      CacheHelper.saveData(key: 'theme', value: 'light');
     }
   }
 
-  // 🔥 دي الدالة اللي كانت ناقصة عشان الزرار يشتغل صح 🔥
+  // 🔥 الدالة المظبوطة اللي زرار السيتينج بينادي عليها 🔥
   void toggleTheme() {
-    if (state == ThemeMode.light || state == ThemeMode.system) {
+    if (state == ThemeMode.light) {
       changeTheme(ThemeMode.dark);
     } else {
       changeTheme(ThemeMode.light);

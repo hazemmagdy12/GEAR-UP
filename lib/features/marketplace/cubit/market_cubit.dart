@@ -19,7 +19,7 @@ class MarketCubit extends Cubit<MarketState> {
   MarketCubit() : super(MarketInitial()) {
     Future.microtask(() => loadCompareCarsFromCache());
   }
-
+  bool hasReachedMaxSearch = false; // 🔥 عشان نعرف السيرفر خلص ولا لأ
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final cloudinary = CloudinaryPublic('dfawviyf3', 'zclpevpk', cache: false);
   final Dio _dio = Dio();
@@ -126,60 +126,153 @@ class MarketCubit extends Cubit<MarketState> {
 
   Future<void> searchSpecificCar(String query, {bool isLoadMore = false}) async {
     if (query.trim().isEmpty) return;
-    if (isLoadMore && isSearchingMore) return;
-    final parsedData = parseSearchQuery(query);
-    final List<String> searchWords = parsedData['words'];
-    final String? searchYear = parsedData['year'];
-    final String cleanSearchString = parsedData['cleanQueryForAi'];
+
+    // 🛑 لو بيحمل أصلاً أو وصل لآخر نتايج السيرفر، متعملش ريكويست تاني
+    if (isLoadMore && (isSearchingMore || hasReachedMaxSearch)) return;
 
     if (!isLoadMore) {
-      emit(SearchCarsLoading()); searchResults.clear(); _loadedSearchModels.clear(); searchApiOffset = 0;
-      _currentSearchYear = searchYear != null ? int.parse(searchYear) : _currentYear;
-      List<CarModel> localSearch = carsList.where((car) {
-        final String make = car.make.toLowerCase(); final String model = car.model.toLowerCase(); final String year = car.year.toString().toLowerCase();
-        if (searchYear != null && year != searchYear) return false;
-        if (searchWords.isNotEmpty) { return searchWords.every((word) => make.contains(word) || model.contains(word)); }
-        return true;
-      }).toList();
-      localSearch.sort((a, b) {
-        bool aIsAi = a.sellerId.startsWith('ai_'); bool bIsAi = b.sellerId.startsWith('ai_');
-        if (aIsAi && !bIsAi) return 1; if (!aIsAi && bIsAi) return -1;
-        return b.createdAt.compareTo(a.createdAt);
-      });
-      if (localSearch.isNotEmpty) { searchResults.addAll(localSearch); emit(SearchCarsSuccess()); if (localSearch.length >= 3) { isSearchingMore = false; return; } }
-      isSearchingMore = true; emit(SearchCarsLoadingMore());
-    } else { isSearchingMore = true; emit(SearchCarsLoadingMore()); }
+      emit(SearchCarsLoading());
+      searchResults.clear();
+      searchApiOffset = 0; // 🔥 تصفير عداد الـ API
+      hasReachedMaxSearch = false;
+      isSearchingMore = true;
 
-    try {
-      String avoidModels = _loadedSearchModels.isEmpty ? "None" : _loadedSearchModels.join(", ");
-      final aiResponse = await _dio.post('$_baseUrl/api/ai/chat', data: {"messages": [{"role": "system", "content": "Generate a JSON array of 5 distinct car objects. Format: [{\"make\":\"...\",\"model\":\"...\",\"year\":\"...\",\"price\":1000000,\"condition\":\"used_condition\",\"hp\":\"...\",\"cc\":\"...\",\"torque\":\"...\",\"mileage\":\"...\"}]"}, {"role": "user", "content": "Generate 5 distinct variants for the brand/model query: '${cleanSearchString.isEmpty ? 'Cars in Egypt' : cleanSearchString}' available in Egypt. ALL 5 cars MUST be exactly from the year $_currentSearchYear. DO NOT generate these exact models: [$avoidModels]. Use realistic EGP prices for the current year $_currentYear."}], "temperature": 0.7});
-      if (aiResponse.statusCode == 200) {
-        String responseText = aiResponse.data['choices'][0]['message']['content']; int startIndex = responseText.indexOf('['); int endIndex = responseText.lastIndexOf(']');
-        if (startIndex != -1 && endIndex != -1) {
-          String jsonArray = responseText.substring(startIndex, endIndex + 1); List<dynamic> generatedCars = jsonDecode(jsonArray);
-          List<CarModel> newFetchedCars = [];
-          List<Future<void>> futures = generatedCars.map<Future<void>>((aiCar) async {
-            String make = aiCar['make'].toString().toUpperCase(); String model = aiCar['model'].toString().toUpperCase(); String year = aiCar['year'].toString(); _loadedSearchModels.add("$model");
-            String imageUrl = await _getSmartImage(make, model, year); String docId = _firestore.collection('cars').doc().id;
-            CarModel fetchedCar = CarModel(id: docId, sellerId: 'ai_search', itemType: 'type_car', make: make, model: model, year: year, price: double.tryParse(aiCar['price'].toString()) ?? 1500000.0, condition: aiCar['condition'] ?? 'used_condition', description: '✨ تم جلب المواصفات لنسخة سنة $year للسوق المصري عبر الذكاء الاصطناعي.', images: [imageUrl], createdAt: DateTime.now().toIso8601String(), hp: aiCar['hp']?.toString() ?? 'N/A', cc: aiCar['cc']?.toString() ?? 'N/A', torque: aiCar['torque']?.toString() ?? 'N/A', transmission: 'Automatic', luggageCapacity: 'N/A', mileage: aiCar['mileage']?.toString() ?? '0', sellerName: 'GEAR UP Search', sellerPhone: '16000', sellerLocation: 'مصر', sellerEmail: '', rating: 0.0, reviewsCount: 0);
-            await _firestore.collection('cars').doc(docId).set(fetchedCar.toMap());
-            carsList.add(fetchedCar); newFetchedCars.add(fetchedCar);
-          }).toList();
-          await Future.wait(futures);
-          if (isLoadMore) { searchResults.addAll(newFetchedCars); } else {
-            searchResults.addAll(newFetchedCars);
-            searchResults.sort((a, b) { bool aIsAi = a.sellerId.startsWith('ai_'); bool bIsAi = b.sellerId.startsWith('ai_'); if (aIsAi && !bIsAi) return 1; if (!aIsAi && bIsAi) return -1; return b.createdAt.compareTo(a.createdAt); });
+      // ========================================================
+      // 🔥 البحث الهجين (اللوكال أولاً) 🔥
+      // ========================================================
+      String lowerQuery = query.toLowerCase().trim();
+      Set<String> addedIds = {};
+
+      void searchInList(List<CarModel> list) {
+        for (var item in list) {
+          if (!addedIds.contains(item.id)) {
+            if (item.make.toLowerCase().contains(lowerQuery) ||
+                item.model.toLowerCase().contains(lowerQuery) ||
+                item.description.toLowerCase().contains(lowerQuery) ||
+                item.year.contains(lowerQuery)) {
+              searchResults.add(item);
+              addedIds.add(item.id);
+            }
           }
-          searchApiOffset += 5; if (searchApiOffset % 10 == 0 && searchYear == null) { _currentSearchYear--; _loadedSearchModels.clear(); }
-          emit(SearchCarsSuccess());
         }
       }
-    } catch (e) { emit(SearchCarsSuccess()); }
-    isSearchingMore = false;
+
+      searchInList(promotedPartsList);
+      searchInList(sparePartsList);
+      searchInList(promotedCarsList);
+      searchInList(carsList);
+      // ========================================================
+
+    } else {
+      isSearchingMore = true;
+      emit(SearchCarsLoadingMore());
+    }
+
+    try {
+      // 🚀 بنكلم السيرفر ونبعتله العداد الخاص بيه عشان يجيب الجديد
+      final response = await _dio.post(
+        '$_baseUrl/api/search/smart',
+        data: {
+          "query": query.trim(),
+          "offset": searchApiOffset, // 🔥 بنبعت الـ Offset للسيرفر
+          "limit": 10,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data;
+        final String category = data['category'] ?? 'cars';
+        final List<dynamic> resultsList = data['results'] ?? [];
+
+        List<CarModel> fetchedItems = [];
+
+        if (category == 'cars') {
+          for (var item in resultsList) {
+            fetchedItems.add(CarModel(
+              id: item['id']?.toString() ?? '', sellerId: item['sellerId']?.toString() ?? 'ai_server', itemType: item['itemType']?.toString() ?? 'type_car',
+              make: item['make']?.toString() ?? 'Unknown', model: item['model']?.toString() ?? 'Unknown', year: item['year']?.toString() ?? '2024',
+              price: double.tryParse(item['price'].toString()) ?? 1500000.0, condition: item['condition']?.toString() ?? 'used_condition',
+              description: item['description']?.toString() ?? '',
+              images: (item['images'] is List) ? List<String>.from(item['images']) : (item['images'] is String ? [item['images']] : []),
+              createdAt: item['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+              hp: item['hp']?.toString() ?? 'N/A', cc: item['cc']?.toString() ?? 'N/A', torque: item['torque']?.toString() ?? 'N/A',
+              transmission: item['transmission']?.toString() ?? 'Automatic', luggageCapacity: 'N/A', mileage: item['mileage']?.toString() ?? '0',
+              sellerName: item['sellerName']?.toString() ?? 'GEAR UP Global', sellerPhone: '16000', sellerLocation: 'مصر', sellerEmail: '',
+              rating: 0.0, reviewsCount: 0, viewsCount: 0,
+            ));
+          }
+        } else if (category == 'spare_parts') {
+          for (var item in resultsList) {
+            fetchedItems.add(CarModel(
+              id: item['id']?.toString() ?? '', sellerId: item['sellerId']?.toString() ?? 'ai_server', itemType: item['itemType']?.toString() ?? 'type_spare_part',
+              make: item['title']?.toString() ?? 'قطعة غيار', model: item['carCompatibility']?.toString() ?? 'متوافق مع جميع السيارات', year: '0',
+              price: double.tryParse(item['price'].toString()) ?? 500.0, condition: 'new', description: item['description']?.toString() ?? '',
+              images: (item['images'] is List) ? List<String>.from(item['images']) : (item['images'] is String ? [item['images']] : []),
+              createdAt: item['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+              hp: 'N/A', cc: 'N/A', torque: 'N/A', transmission: 'N/A', luggageCapacity: 'N/A', mileage: '0',
+              sellerName: item['sellerName']?.toString() ?? 'GEAR UP Global', sellerPhone: '16000', sellerLocation: 'مصر', sellerEmail: '',
+              rating: 0.0, reviewsCount: 0, viewsCount: 0,
+            ));
+          }
+        }
+
+        if (fetchedItems.isEmpty) {
+          // السيرفر جاب آخره ورد بليستة فاضية
+          hasReachedMaxSearch = true;
+        } else {
+          searchApiOffset += fetchedItems.length; // بنزود العداد
+
+          int newlyAddedCount = 0; // 🔥 متغير عشان نعد الحاجات الجديدة بس
+
+          for (var item in fetchedItems) {
+            // لو القطعة دي مش موجودة عندنا في اللستة قبل كده، ضيفها
+            if (!searchResults.any((existing) => existing.id == item.id)) {
+              searchResults.add(item);
+              newlyAddedCount++;
+            }
+          }
+
+          // ========================================================
+          // 🔥 تسجيل النتايج الجديدة في الفايربيز في مكانها الصح 🔥
+          // ========================================================
+          for (var item in fetchedItems) {
+            if (item.id.isNotEmpty && item.sellerId == 'ai_server') {
+
+              String targetCollection = item.itemType == 'type_spare_part' ? 'spare_parts' : 'cars';
+
+              await FirebaseFirestore.instance
+                  .collection(targetCollection)
+                  .doc(item.id)
+                  .set(item.toMap(), SetOptions(merge: true));
+            }
+          }
+          // ========================================================
+
+          // 🔥 التعديل السحري: مش هنقفل السكرول إلا لو السيرفر جاب داتا متكررة 100%
+          // أو مفيش ولا حاجة جديدة اتضافت في الـ Load More
+          if (isLoadMore && newlyAddedCount == 0) {
+            hasReachedMaxSearch = true;
+          }
+        }
+
+        emit(SearchCarsSuccess());
+      }
+    } catch (e) {
+      print('❌ خطأ في البحث الذكي: $e');
+      emit(SearchCarsSuccess());
+    } finally {
+      isSearchingMore = false;
+    }
   }
 
-  void clearSearch() { searchResults.clear(); _loadedSearchModels.clear(); searchApiOffset = 0; _currentSearchYear = _currentYear; emit(MarketInitial()); }
-
+  void clearSearch() {
+    searchResults.clear();
+    _loadedSearchModels.clear();
+    searchApiOffset = 0;
+    _currentSearchYear = _currentYear;
+    hasReachedMaxSearch = false; // 🔥 حطيناها جوه الدالة في مكانها الصح
+    emit(MarketInitial());
+  }
   bool isSearchingCategoryAPI = false;
 
   Future<void> searchCategoryCarsFromAI(String query, String categoryTitle) async {
@@ -236,73 +329,76 @@ class MarketCubit extends Cubit<MarketState> {
 
   Future<void> getSpareParts({bool isRefresh = false}) async {
     if (isRefresh) { sparePartsList.clear(); feedSparePartsList.clear(); promotedPartsList.clear(); _loadedPartsNames.clear(); }
-    if (sparePartsList.isNotEmpty && feedSparePartsList.isNotEmpty) return;
+    if (sparePartsList.isNotEmpty && !isRefresh) return;
     emit(SearchCarsLoading()); isFetchingParts = true;
     try {
-      final results = await Future.wait([_firestore.collection('spare_parts').get(), _firestore.collection('promoted_parts').get()]);
-      List<CarModel> normalParts = results[0].docs.map((doc) => CarModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
-      List<CarModel> vipParts = results[1].docs.map((doc) => CarModel.fromJson(doc.data() as Map<String, dynamic>)).toList();
+      final results = await Future.wait([_firestore.collection('spare_parts').orderBy('createdAt', descending: true).limit(20).get(), _firestore.collection('promoted_parts').get()]);
       DateTime fiveMonthsAgo = DateTime.now().subtract(const Duration(days: 150));
       sparePartsList.clear(); promotedPartsList.clear();
-      for (var part in vipParts) {
-        DateTime createdAt = DateTime.tryParse(part.createdAt) ?? DateTime.now();
-        if (createdAt.isBefore(fiveMonthsAgo)) { await _firestore.collection('promoted_parts').doc(part.id).delete(); continue; }
-        promotedPartsList.add(part);
+
+      for (var doc in results[1].docs) {
+        final partData = doc.data() as Map<String, dynamic>;
+        DateTime createdAt = DateTime.tryParse(partData['createdAt']?.toString() ?? '') ?? DateTime.now();
+        if (createdAt.isBefore(fiveMonthsAgo)) { await _firestore.collection('promoted_parts').doc(doc.id).delete(); continue; }
+        promotedPartsList.add(CarModel(
+          id: doc.id, sellerId: partData['sellerId']?.toString() ?? 'unknown', itemType: 'type_spare_part',
+          // 🔥 الحماية من الـ Null هنا 🔥
+          make: partData['title']?.toString() ?? partData['make']?.toString() ?? 'قطعة غيار',
+          model: partData['carCompatibility']?.toString() ?? partData['model']?.toString() ?? 'متوافق مع جميع السيارات',
+          year: partData['year']?.toString() ?? '0',
+          price: double.tryParse(partData['price']?.toString() ?? '500') ?? 500.0,
+          condition: partData['condition']?.toString() ?? 'new',
+          description: partData['description']?.toString() ?? '',
+          images: (partData['images'] is List) ? List<String>.from(partData['images']) : (partData['images'] is String ? [partData['images']] : []),
+          createdAt: partData['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+          hp: 'N/A', cc: 'N/A', torque: 'N/A', transmission: 'N/A', luggageCapacity: 'N/A', mileage: '0',
+          sellerName: partData['sellerName']?.toString() ?? 'GEAR UP', sellerPhone: '16000', sellerLocation: 'مصر', sellerEmail: '', rating: 0.0, reviewsCount: 0, viewsCount: 0,
+        ));
       }
-      for (var part in normalParts) { sparePartsList.add(part); }
-      sparePartsList.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      _loadedPartsNames = sparePartsList.map((e) => e.make.toLowerCase()).toList();
-      _blendSpareParts();
-      String? lastFetch = CacheHelper.getData(key: 'last_parts_ai_fetch');
-      bool shouldFetchAi = lastFetch == null || DateTime.now().difference(DateTime.parse(lastFetch)).inHours >= 24;
-      if (sparePartsList.isEmpty || shouldFetchAi) { await _fetchPartsFromAI(isPopularEgyptianMarket: true); await CacheHelper.saveData(key: 'last_parts_ai_fetch', value: DateTime.now().toIso8601String()); } else { emit(SearchCarsSuccess()); }
-    } catch (e) { await _fetchPartsFromAI(isPopularEgyptianMarket: true); } finally { isFetchingParts = false; }
+
+      for (var doc in results[0].docs) {
+        final partData = doc.data() as Map<String, dynamic>;
+        sparePartsList.add(CarModel(
+          id: doc.id, sellerId: partData['sellerId']?.toString() ?? 'ai_server', itemType: 'type_spare_part',
+          // 🔥 الحماية من الـ Null هنا 🔥
+          make: partData['title']?.toString() ?? partData['make']?.toString() ?? 'قطعة غيار',
+          model: partData['carCompatibility']?.toString() ?? partData['model']?.toString() ?? 'متوافق مع جميع السيارات',
+          year: partData['year']?.toString() ?? '0',
+          price: double.tryParse(partData['price']?.toString() ?? '500') ?? 500.0,
+          condition: partData['condition']?.toString() ?? 'new',
+          description: partData['description']?.toString() ?? '',
+          images: (partData['images'] is List) ? List<String>.from(partData['images']) : (partData['images'] is String ? [partData['images']] : []),
+          createdAt: partData['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+          hp: 'N/A', cc: 'N/A', torque: 'N/A', transmission: 'N/A', luggageCapacity: 'N/A', mileage: '0',
+          sellerName: partData['sellerName']?.toString() ?? 'GEAR UP', sellerPhone: '16000', sellerLocation: 'مصر', sellerEmail: '', rating: 0.0, reviewsCount: 0, viewsCount: 0,
+        ));
+      }
+      if (sparePartsList.isEmpty) { await searchSpecificCar("قطع غيار"); } else { emit(SearchCarsSuccess()); }
+    } catch (e) { emit(SearchCarsSuccess()); } finally { isFetchingParts = false; }
   }
 
-  Future<void> loadMoreSpareParts({String query = "", List<String> companies = const []}) async {
-    if (isFetchingMoreParts) return; isFetchingMoreParts = true; emit(SearchCarsLoadingMore());
+  Future<void> loadMoreSpareParts() async {
+    if (isFetchingMoreParts) return;
+    isFetchingMoreParts = true; emit(SearchCarsLoadingMore());
     try {
-      String brandFilter = companies.isNotEmpty ? "MUST ONLY BE COMPATIBLE WITH: ${companies.join(' or ')}." : "";
-      if (query.isEmpty && companies.isEmpty) { await _fetchPartsFromAI(isPopularEgyptianMarket: true); } else {
-        final parsedData = parseSearchQuery(query, isPart: true); String cleanQuery = parsedData['cleanQueryForAi']; String aiYear = parsedData['year'] ?? _currentYear.toString();
-        String finalQuery = "${cleanQuery.isEmpty ? 'Spare parts' : cleanQuery} $brandFilter".trim();
-        await _fetchPartsFromAI(partQuery: finalQuery, year: aiYear, isSearch: query.isNotEmpty || companies.isNotEmpty);
+      final response = await _dio.post('$_baseUrl/api/search/smart', data: {"query": "قطع غيار متنوعة للسيارات في مصر", "offset": sparePartsList.length});
+      if (response.statusCode == 200) {
+        final List<dynamic> resultsList = response.data['results'] ?? [];
+        for (var item in resultsList) {
+          if (!sparePartsList.any((part) => part.id == item['id'])) {
+            sparePartsList.add(CarModel(
+              id: item['id'] ?? '', sellerId: item['sellerId'] ?? 'ai_server', itemType: 'type_spare_part',
+              make: item['title'] ?? 'قطعة غيار', model: item['carCompatibility'] ?? 'متوافق مع جميع السيارات', year: '0',
+              price: double.tryParse(item['price'].toString()) ?? 500.0, condition: 'new', description: item['description'] ?? '',
+              images: (item['images'] is List) ? List<String>.from(item['images']) : (item['images'] is String ? [item['images']] : []),
+              createdAt: item['createdAt'] ?? DateTime.now().toIso8601String(), hp: 'N/A', cc: 'N/A', torque: 'N/A', transmission: 'N/A', luggageCapacity: 'N/A', mileage: '0',
+              sellerName: item['sellerName'] ?? 'GEAR UP Global', sellerPhone: '16000', sellerLocation: 'مصر', sellerEmail: '', rating: 0.0, reviewsCount: 0, viewsCount: 0,
+            ));
+          }
+        }
       }
     } catch (e) {}
     isFetchingMoreParts = false; emit(SearchCarsSuccess());
-  }
-
-  Future<void> searchSpareParts(String query) async {
-    if (query.trim().isEmpty) { partsSearchResults.clear(); emit(MarketInitial()); return; }
-    emit(SearchCarsLoading()); partsSearchResults.clear();
-    final parsedData = parseSearchQuery(query, isPart: true); final List<String> searchWords = parsedData['words']; final String? searchYear = parsedData['year']; final String cleanSearchString = parsedData['cleanQueryForAi'];
-    List<CarModel> localResults = sparePartsList.where((part) {
-      final String partName = part.make.toLowerCase(); final String compatibility = part.model.toLowerCase(); final String year = part.year.toString().toLowerCase();
-      if (searchYear != null && year != searchYear) return false;
-      if (searchWords.isNotEmpty) { return searchWords.every((word) => partName.contains(word) || compatibility.contains(word)); } return true;
-    }).toList();
-    localResults.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    partsSearchResults = localResults;
-    if (partsSearchResults.length < 3) { String aiYear = searchYear ?? _currentYear.toString(); await _fetchPartsFromAI(partQuery: cleanSearchString, year: aiYear, isSearch: true); } else { emit(SearchCarsSuccess()); }
-  }
-
-  Future<void> _fetchPartsFromAI({String? partQuery, String? year, bool isPopularEgyptianMarket = false, bool isSearch = false}) async {
-    try {
-      final response = await _dio.get('$_baseUrl/api/generate-parts');
-      if (response.statusCode == 200 && response.data['parts'] != null) {
-        List<dynamic> fetchedParts = response.data['parts'];
-        List<CarModel> newlyFetched = [];
-        for (var partData in fetchedParts) {
-          CarModel fetchedPart = CarModel.fromJson(partData);
-          newlyFetched.add(fetchedPart);
-          if (isSearch) { partsSearchResults.add(fetchedPart); }
-        }
-        sparePartsList.addAll(newlyFetched);
-        _blendSpareParts();
-        if (isSearch) { partsSearchResults.sort((a, b) => b.createdAt.compareTo(a.createdAt)); }
-        emit(SearchCarsSuccess());
-      }
-    } catch (e) { print('❌ خطأ في جلب قطع الغيار من السيرفر: $e'); }
   }
 
   Future<List<CarModel>> _fetchPersonalizedCarsFromAI(String usage, String budget) async {
@@ -572,8 +668,43 @@ class MarketCubit extends Cubit<MarketState> {
   }
 
   List<Map<String, dynamic>> myCars = []; List<Map<String, dynamic>> myReminders = []; List<Map<String, dynamic>> myMaintenanceHistory = []; bool isLoadingMyCar = false;
-  Future<void> getMyCarData() async { String? uid = CacheHelper.getData(key: 'uid'); if (uid == null || uid.isEmpty) return; isLoadingMyCar = true; emit(MarketInitial()); try { final vehiclesSnapshot = await _firestore.collection('users').doc(uid).collection('my_cars').get(); myCars = vehiclesSnapshot.docs.map((doc) { var data = doc.data(); data['id'] = doc.id; return data; }).toList(); await CacheHelper.saveData(key: 'offline_my_cars_$uid', value: jsonEncode(myCars)); final remindersSnapshot = await _firestore.collection('users').doc(uid).collection('reminders').orderBy('date').get(); myReminders = remindersSnapshot.docs.map((doc) => doc.data()).toList(); await CacheHelper.saveData(key: 'offline_reminders_$uid', value: jsonEncode(myReminders)); final maintenanceSnapshot = await _firestore.collection('users').doc(uid).collection('maintenance').orderBy('date', descending: true).get(); myMaintenanceHistory = maintenanceSnapshot.docs.map((doc) => doc.data()).toList(); await CacheHelper.saveData(key: 'offline_maintenance_$uid', value: jsonEncode(myMaintenanceHistory)); _checkAndTriggerRemindersAlarms(); } catch (e) { String? cC = CacheHelper.getData(key: 'offline_my_cars_$uid'); if (cC != null) myCars = List<Map<String, dynamic>>.from(jsonDecode(cC)); String? cR = CacheHelper.getData(key: 'offline_reminders_$uid'); if (cR != null) myReminders = List<Map<String, dynamic>>.from(jsonDecode(cR)); String? cM = CacheHelper.getData(key: 'offline_maintenance_$uid'); if (cM != null) myMaintenanceHistory = List<Map<String, dynamic>>.from(jsonDecode(cM)); } finally { isLoadingMyCar = false; emit(MarketInitial()); } }
-  Future<void> saveMyVehicleDetails({String? vehicleId, required String make, required String model, required String year, required String mileage, required List<String> imagesUrls,}) async { String? uid = CacheHelper.getData(key: 'uid'); if (uid == null) return; try { String docId = vehicleId ?? _firestore.collection('users').doc(uid).collection('my_cars').doc().id; Map<String, dynamic> data = {'id': docId, 'make': make, 'model': model, 'year': year, 'mileage': mileage, 'images': imagesUrls,}; await _firestore.collection('users').doc(uid).collection('my_cars').doc(docId).set(data, SetOptions(merge: true)); int index = myCars.indexWhere((v) => v['id'] == docId); if (index != -1) { myCars[index] = data; } else { myCars.add(data); } await CacheHelper.saveData(key: 'offline_my_cars_$uid', value: jsonEncode(myCars)); emit(MarketInitial()); } catch (e) { } }
+  Future<void> getMyCarData() async {
+    String? uid = CacheHelper.getData(key: 'uid');
+    if (uid == null || uid.isEmpty) return;
+
+    isLoadingMyCar = true;
+    emit(MarketInitial());
+
+    try {
+      // 🔥 ضفنا timeout (3 ثواني) عشان لو مفيش نت يفصل فوراً وينزل يسحب من الكاش 🔥
+      final vehiclesSnapshot = await _firestore.collection('users').doc(uid).collection('my_cars').get().timeout(const Duration(seconds: 3));
+      myCars = vehiclesSnapshot.docs.map((doc) { var data = doc.data(); data['id'] = doc.id; return data; }).toList();
+      await CacheHelper.saveData(key: 'offline_my_cars_$uid', value: jsonEncode(myCars));
+
+      final remindersSnapshot = await _firestore.collection('users').doc(uid).collection('reminders').orderBy('date').get().timeout(const Duration(seconds: 3));
+      myReminders = remindersSnapshot.docs.map((doc) => doc.data()).toList();
+      await CacheHelper.saveData(key: 'offline_reminders_$uid', value: jsonEncode(myReminders));
+
+      final maintenanceSnapshot = await _firestore.collection('users').doc(uid).collection('maintenance').orderBy('date', descending: true).get().timeout(const Duration(seconds: 3));
+      myMaintenanceHistory = maintenanceSnapshot.docs.map((doc) => doc.data()).toList();
+      await CacheHelper.saveData(key: 'offline_maintenance_$uid', value: jsonEncode(myMaintenanceHistory));
+
+      _checkAndTriggerRemindersAlarms();
+    } catch (e) {
+      // 🚀 جاري السحب من الكاش طلقة في حالة عدم وجود نت 🚀
+      String? cC = CacheHelper.getData(key: 'offline_my_cars_$uid');
+      if (cC != null) myCars = List<Map<String, dynamic>>.from(jsonDecode(cC));
+
+      String? cR = CacheHelper.getData(key: 'offline_reminders_$uid');
+      if (cR != null) myReminders = List<Map<String, dynamic>>.from(jsonDecode(cR));
+
+      String? cM = CacheHelper.getData(key: 'offline_maintenance_$uid');
+      if (cM != null) myMaintenanceHistory = List<Map<String, dynamic>>.from(jsonDecode(cM));
+    } finally {
+      isLoadingMyCar = false;
+      emit(GetCarsSuccess()); // 🔥 خليناها Success عشان الشاشة تحدث وتجيب داتا الكاش
+    }
+  }  Future<void> saveMyVehicleDetails({String? vehicleId, required String make, required String model, required String year, required String mileage, required List<String> imagesUrls,}) async { String? uid = CacheHelper.getData(key: 'uid'); if (uid == null) return; try { String docId = vehicleId ?? _firestore.collection('users').doc(uid).collection('my_cars').doc().id; Map<String, dynamic> data = {'id': docId, 'make': make, 'model': model, 'year': year, 'mileage': mileage, 'images': imagesUrls,}; await _firestore.collection('users').doc(uid).collection('my_cars').doc(docId).set(data, SetOptions(merge: true)); int index = myCars.indexWhere((v) => v['id'] == docId); if (index != -1) { myCars[index] = data; } else { myCars.add(data); } await CacheHelper.saveData(key: 'offline_my_cars_$uid', value: jsonEncode(myCars)); emit(MarketInitial()); } catch (e) { } }
   Future<void> saveReminder({String? id, String? carId, required String task, required String date, required String notes}) async { String? uid = CacheHelper.getData(key: 'uid'); if (uid == null) return; try { String docId = id ?? _firestore.collection('users').doc(uid).collection('reminders').doc().id; Map<String, dynamic> reminderData = { 'id': docId, 'carId': carId, 'task': task, 'date': date, 'notes': notes }; await _firestore.collection('users').doc(uid).collection('reminders').doc(docId).set(reminderData); int index = myReminders.indexWhere((r) => r['id'] == docId); if (index != -1) { myReminders[index] = reminderData; } else { myReminders.add(reminderData); } myReminders.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String)); await CacheHelper.saveData(key: 'offline_reminders_$uid', value: jsonEncode(myReminders)); _checkAndTriggerRemindersAlarms(); emit(MarketInitial()); } catch (e) { } }
   Future<void> deleteReminder(String id) async { String? uid = CacheHelper.getData(key: 'uid'); if (uid == null) return; try { await _firestore.collection('users').doc(uid).collection('reminders').doc(id).delete(); myReminders.removeWhere((r) => r['id'] == id); await CacheHelper.saveData(key: 'offline_reminders_$uid', value: jsonEncode(myReminders)); emit(MarketInitial()); } catch (e) { } }
   Future<void> saveMaintenanceRecord({String? id, String? carId, required String title, required String date, required String cost, required String desc}) async { String? uid = CacheHelper.getData(key: 'uid'); if (uid == null) return; try { String docId = id ?? _firestore.collection('users').doc(uid).collection('maintenance').doc().id; Map<String, dynamic> maintenanceData = { 'id': docId, 'carId': carId, 'title': title, 'date': date, 'cost': cost, 'desc': desc }; await _firestore.collection('users').doc(uid).collection('maintenance').doc(docId).set(maintenanceData); int index = myMaintenanceHistory.indexWhere((m) => m['id'] == docId); if (index != -1) { myMaintenanceHistory[index] = maintenanceData; } else { myMaintenanceHistory.add(maintenanceData); } myMaintenanceHistory.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String)); await CacheHelper.saveData(key: 'offline_maintenance_$uid', value: jsonEncode(myMaintenanceHistory)); emit(MarketInitial()); } catch (e) { } }

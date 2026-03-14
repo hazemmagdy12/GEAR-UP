@@ -13,6 +13,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
+  flutter_cache_manager: ^3.3.2 # 🔥 ضفنا مكتبة مسح الكاش هنا 🔥
+
   # --- State Management (إدارة الحالة) ---
   flutter_bloc: ^9.1.1
   equatable: ^2.0.5
@@ -54,9 +56,13 @@ dependencies:
   mailer: ^6.1.1
   video_player: ^2.11.0
 
-  # 🔥 التعديل هنا: رفعنا الإصدار عشان يتوافق مع باقي المكاتب
+  # --- Notifications ---
   firebase_messaging: ^16.1.2
   flutter_local_notifications: ^17.1.2
+
+  # 🔥 التعديلات الجديدة هنا (الإشعارات والجولة التعريفية) 🔥
+  permission_handler: ^11.3.1
+  showcaseview: ^5.0.1
 
   # 🔥 الباكدج الخاصة بالسبلاش سكرين
   flutter_native_splash: ^2.4.0
@@ -64,6 +70,13 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # 🔥 أسلحة الدمار الشامل (مكتبات التيست) 🔥
+  integration_test:
+    sdk: flutter
+  bloc_test: ^10.0.0
+  mocktail: ^1.0.3
+
   flutter_lints: ^6.0.0
 
   # 🔥 الباكدج الخاصة بأيقونة التطبيق
@@ -80,10 +93,13 @@ flutter:
 # ===================================================
 # 🔥 إعدادات أيقونة التطبيق (App Icon) 🔥
 # ===================================================
-flutter_icons:
-  android: true
+flutter_launcher_icons:
+  android: "launcher_icon"
   ios: true
   image_path: "assets/images/gear_up.png"
+  remove_alpha_ios: true # 🔥 ضفنا السطر ده عشان أبل بترفض الأيقونات الشفافة 🔥
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/gear_up.png"
 
 # ===================================================
 # 🔥 إعدادات السبلاش سكرين (Splash Screen) 🔥

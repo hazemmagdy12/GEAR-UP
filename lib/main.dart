@@ -6,9 +6,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
-// 🔥 استدعاء ملف الإشعارات اللي عملناه
-import 'core/utils/notification_helper.dart';
+import 'package:permission_handler/permission_handler.dart';
 
+import 'core/utils/notification_helper.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/cubit/theme_cubit.dart';
 import 'core/localization/cubit/locale_cubit.dart';
@@ -22,17 +22,20 @@ void main() async {
 
   await CacheHelper.init();
 
-  // 🔥 التعديل السحري: لو الأبلكيشن لسه بيفتح لأول مرة (مفيش لغة محفوظة)، خليه "عربي" افتراضياً
   if (CacheHelper.getData(key: 'lang') == null) {
     await CacheHelper.saveData(key: 'lang', value: 'ar');
   }
 
   await Firebase.initializeApp();
 
-  // 🔥 التعديل الأول: شيلنا الـ await من هنا عشان الأبلكيشن ميستناش النت ويفتح فوراً
+  await Permission.notification.isDenied.then((value) {
+    if (value) {
+      Permission.notification.request();
+    }
+  });
+
   NotificationHelper.init();
 
-  // 🔥 التعديل التاني: شيلنا الـ await من جروب المستخدمين برضه لنفس السبب
   FirebaseMessaging.instance.subscribeToTopic('all_users');
 
   FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true);
@@ -56,6 +59,7 @@ class GearUpApp extends StatelessWidget {
         BlocProvider(create: (context) => AuthCubit()),
         BlocProvider(create: (context) => MarketCubit()),
       ],
+      // 🔥 الـ BlocBuilder اللي بيلقط التغيير من السيتينج ويسمعه في التطبيق كله 🔥
       child: BlocBuilder<ThemeCubit, ThemeMode>(
         builder: (context, themeMode) {
           return BlocBuilder<LocaleCubit, Locale>(
@@ -72,6 +76,7 @@ class GearUpApp extends StatelessWidget {
                     displayColor: Colors.white,
                   ),
                 ),
+                // 🔥 الربط المباشر مع حالة الـ Cubit 🔥
                 themeMode: themeMode,
                 locale: locale,
                 supportedLocales: const [

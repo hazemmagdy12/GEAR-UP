@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart'; // 🔥 المكتبة الرسمية الآمنة لفتح الإيميل 🔥
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
 import '../../../core/local_storage/cache_helper.dart';
@@ -51,16 +52,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
   }
 
-  // 🔥 دالة تشفير الإيميل - تخفي الجزء الأكبر منه للخصوصية 🔥
   String _maskEmail(String email) {
     if (email.isEmpty) return '';
     final parts = email.split('@');
     if (parts.length != 2) return email;
 
-    final localPart = parts[0];   // الجزء قبل الـ @
-    final domainPart = parts[1];  // الجزء بعد الـ @
+    final localPart = parts[0];
+    final domainPart = parts[1];
 
-    // تشفير الجزء المحلي: أول حرف + نجوم + آخر حرف
     String maskedLocal;
     if (localPart.length <= 2) {
       maskedLocal = '*' * localPart.length;
@@ -68,7 +67,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       maskedLocal = '${localPart[0]}${'*' * (localPart.length - 2)}${localPart[localPart.length - 1]}';
     }
 
-    // تشفير الدومين: أول حرف + نجوم + آخر جزء (امتداد زي .com)
     final domainSegments = domainPart.split('.');
     String maskedDomain;
     if (domainSegments.length >= 2) {
@@ -100,6 +98,40 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
   }
 
+  // 🔥 الدالة الجديدة المضمونة لفتح تطبيق الإيميل 🔥
+  // 🔥 الدالة الجديدة لفتح صندوق الوارد بتاع الجيميل أو الموقع 🔥
+  void _openEmailApp() async {
+    final Uri gmailWebUrl = Uri.parse('https://mail.google.com');
+    final Uri iosGmailAppUrl = Uri.parse('googlegmail://');
+
+    try {
+      // لو الموبايل آيفون
+      if (Theme.of(context).platform == TargetPlatform.iOS) {
+        if (await canLaunchUrl(iosGmailAppUrl)) {
+          // بيفتح تطبيق جيميل للآيفون لو متسطب
+          await launchUrl(iosGmailAppUrl, mode: LaunchMode.externalApplication);
+        } else {
+          // بيفتح المتصفح لو التطبيق مش موجود
+          await launchUrl(gmailWebUrl, mode: LaunchMode.externalApplication);
+        }
+      }
+      // لو الموبايل أندرويد
+      else {
+        // الأندرويد بيلقط الرابط ده ويفتح تطبيق الجيميل فوراً، ولو مش متسطب بيفتح جوجل كروم على الجيميل
+        await launchUrl(gmailWebUrl, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLang.tr(context, 'no_email_app') ?? 'حدث خطأ أثناء فتح البريد الإلكتروني.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     timer?.cancel();
@@ -112,7 +144,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color screenBgColor = isDark ? const Color(0xFF0A0F14) : const Color(0xFFE3F2FD);
 
-    // 🔥 الإيميل المشفر - بيظهر للمستخدم بدل الإيميل الحقيقي كامل 🔥
     final String rawEmail = FirebaseAuth.instance.currentUser?.email ?? '';
     final String maskedEmail = _maskEmail(rawEmail);
 
@@ -158,7 +189,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               ),
               const SizedBox(height: 8),
 
-              // 🔥 الإيميل المشفر بدل الإيميل الحقيقي 🔥
               Directionality(
                 textDirection: TextDirection.ltr,
                 child: Text(
@@ -169,7 +199,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               ),
               const SizedBox(height: 8),
 
-              // 🔥 تنبيه للمستخدم إنه يفتش الـ Spam 🔥
               Container(
                 margin: const EdgeInsets.only(top: 12),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -197,6 +226,28 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               ),
 
               const SizedBox(height: 32),
+
+              // 🔥 الزرار السحري لفتح تطبيق الإيميل (Gmail) 🔥
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _openEmailApp,
+                  icon: const Icon(Icons.mail_outline, color: Colors.white),
+                  label: Text(
+                    AppLang.tr(context, 'open_mail_app') ?? "فتح تطبيق الإيميل",
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 5,
+                    shadowColor: AppColors.primary.withOpacity(0.4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
               const CircularProgressIndicator(color: AppColors.primary),
               const SizedBox(height: 16),
               Text(

@@ -243,7 +243,7 @@ class _AiChatBottomSheetState extends State<AiChatBottomSheet> {
 
     try {
       final response = await _dio.post(
-        'http://10.0.2.2:3000/api/ai/openrouter-chat', // لينك السيرفر بتاعك
+        'https://d897c33f-6257-4a85-9126-2bc9c6be829e-00-dd6nn6kccr87.spock.replit.dev/api/ai/openrouter-chat',
         options: Options(
           headers: {
             'Content-Type': 'application/json',

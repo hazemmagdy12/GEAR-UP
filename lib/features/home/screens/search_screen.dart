@@ -8,6 +8,7 @@ import '../widgets/filters_bottom_sheet.dart';
 import '../widgets/car_card.dart';
 import '../../marketplace/cubit/market_cubit.dart';
 import '../../marketplace/cubit/market_state.dart';
+import '../widgets/part_card.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -227,8 +228,16 @@ class _SearchScreenState extends State<SearchScreen> {
                             child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
                           );
                         }
-                        return CarCard(car: cubit.searchResults[index], isPromoted: false);
-                      },
+                        final currentItem = cubit.searchResults[index];
+
+                        // 🔥 لو العنصر ده قطعة غيار، ارسم PartCard
+                        if (currentItem.itemType == 'type_spare_part') {
+                          return PartCard(partItem: currentItem, isPromoted: false);
+                        }
+                        // 🔥 لو عربية، ارسم CarCard العادي
+                        else {
+                          return CarCard(car: currentItem, isPromoted: false);
+                        }                      },
                     );
                   }
 
