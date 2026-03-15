@@ -32,11 +32,15 @@ android {
     }
 
     buildTypes {
-        release {
+        getByName("release") {
+            // لو إنت لسه مضفتش بصمة الريليس فوق، خلي الكلمة دي "debug" مؤقتاً عشان النسخة تطلع
             signingConfig = signingConfigs.getByName("debug")
+
+            // السطر السحري بتاعنا بس بلغة Kotlin 🔥
+            ndk.debugSymbolLevel = "NONE"
         }
     }
-}
+} // 🔥 القوس ده هو اللي كان ناقص وعامل المشكلة! 🔥
 
 flutter {
     source = "../.."
