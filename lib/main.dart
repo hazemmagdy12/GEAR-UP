@@ -28,11 +28,19 @@ void main() async {
 
   await Firebase.initializeApp();
 
+  // الكود بتاعك القديم زي ما هو (ممتاز جداً)
   await Permission.notification.isDenied.then((value) {
     if (value) {
       Permission.notification.request();
     }
   });
+
+  // 🔥 ضفنا السطرين دول بس عشان الفايربيز نفسه يتأكد من الصلاحية ويسجل الجهاز 🔥
+  await FirebaseMessaging.instance.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
 
   NotificationHelper.init();
 

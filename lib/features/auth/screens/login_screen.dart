@@ -80,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // 🔥 الدالة المؤمنة (Bulletproof) للتشييك على السيرفاي 🔥
+  // 🔥 الدالة المؤمنة للتشييك على السيرفاي 🔥
   Future<void> _checkSurveyAndNavigate() async {
     setState(() => _isCheckingSurvey = true);
     String? uid = CacheHelper.getData(key: 'uid');
@@ -139,7 +139,6 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       body: BlocConsumer<AuthCubit, AuthState>(
         listener: (context, state) async {
-          // 🔥 هنا بنسمع للـ State الجديدة اللي ضفناها في الـ AuthCubit 🔥
           if (state is AuthSuccess) {
             await _checkSurveyAndNavigate();
           } else if (state is AuthNeedsSurvey) {
@@ -163,6 +162,68 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 8),
                   Text(AppLang.tr(context, 'sign_in') ?? "Sign in to continue", style: TextStyle(color: isDark ? Colors.white70 : AppColors.textSecondary, fontSize: 16)),
                   const SizedBox(height: 32),
+
+                  // 🔥 زرار جوجل البريميام 🔥
+                  Container(
+                    width: double.infinity,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1A1F26) : Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: isDark ? Colors.white.withOpacity(0.1) : Colors.white,
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isDark ? Colors.black.withOpacity(0.4) : AppColors.primary.withOpacity(0.1),
+                          blurRadius: 15,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: (state is AuthLoading || _isCheckingSurvey)
+                            ? null
+                            : () => context.read<AuthCubit>().signInWithGoogle(),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.asset('assets/images/google.png', height: 24),
+                            const SizedBox(width: 14),
+                            Text(
+                              AppLang.tr(context, 'continue_with_google') ?? "Continue with Google",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // 🔥 الفاصل الشيك بين جوجل والإيميل 🔥
+                  Row(
+                    children: [
+                      Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey[300], thickness: 1)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          AppLang.tr(context, 'or_login_with_email') ?? "Or login with email", // ضيف الكلمة دي في ملف الترجمة لو مش موجودة
+                          style: TextStyle(color: isDark ? Colors.white38 : Colors.grey[500], fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ),
+                      Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey[300], thickness: 1)),
+                    ],
+                  ),
+                  const SizedBox(height: 30),
 
                   Text(AppLang.tr(context, 'email') ?? "Email", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
                   const SizedBox(height: 8),

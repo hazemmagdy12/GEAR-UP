@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:showcaseview/showcaseview.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/localization/app_lang.dart'; // 🔥 تم استيراد ملف الترجمة
 
 // =================================================================
 // 🔥 كل الـ Keys بتاعت الجولة في مكان واحد 🔥
@@ -41,8 +42,9 @@ class LuxuriousShowcase extends StatelessWidget {
 
     return Showcase(
       key: showcaseKey,
-      title: title ?? '',
-      description: description ?? '',
+      // 🔥 تم تعديل العنوان والوصف ليدعم الترجمة أوتوماتيكياً 🔥
+      title: title != null ? (AppLang.tr(context, title!) ?? title!) : '',
+      description: description != null ? (AppLang.tr(context, description!) ?? description!) : '',
       tooltipBackgroundColor: isDark ? const Color(0xFF161E27) : Colors.white,
       textColor: isDark ? Colors.white : Colors.black87,
       titleTextStyle: const TextStyle(

@@ -6,6 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
+
+// الإمبورت الطبيعي اهو (من غير alias عشان مش هنحتاجه خلاص)
+import 'package:google_sign_in/google_sign_in.dart';
+
 import 'auth_state.dart';
 import '../../../core/local_storage/cache_helper.dart';
 import '../models/user_model.dart';
@@ -64,7 +68,6 @@ class AuthCubit extends Cubit<AuthState> {
 
       await _firestore.collection('users').doc(uid).set(userModel.toMap());
 
-      // 🔥 الحل للمشكلة الأولى: نعلم إن ده يوزر جديد لسه معملش السيرفاي 🔥
       await CacheHelper.saveData(key: 'is_new_user_$uid', value: true);
 
       await userCredential.user!.sendEmailVerification();
@@ -91,13 +94,10 @@ class AuthCubit extends Cubit<AuthState> {
       String uid = userCredential.user!.uid;
       await CacheHelper.saveData(key: 'uid', value: uid);
 
-      // 🔥 نتشيك هل اليوزر ده جديد ولا قديم؟ 🔥
       bool isNewUser = CacheHelper.getData(key: 'is_new_user_$uid') ?? false;
       bool surveyCompleted = CacheHelper.getData(key: 'survey_completed') ?? false;
 
       if (isNewUser && !surveyCompleted) {
-        // لو جديد ومعملش السيرفاي، نخليه الـ State تقول إنه محتاج السيرفاي
-        // (لازم تروح في شاشة اللوجين وتعمل Navigation للـ Survey لو الـ State دي طلعت)
         emit(AuthNeedsSurvey(uid));
       } else {
         emit(AuthSuccess(uid));
@@ -108,7 +108,83 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
-  // ... (باقي كود الـ AuthCubit زي ما هو بدون تغيير)
+  // 🔥 دالة جوجل (النسخة المتوافقة 100% مع إصدار 7.2) 🔥
+  Future<void> signInWithGoogle() async {
+    emit(AuthLoading());
+    try {
+      // 1. تعريف المكتبة بنظام الـ Singleton (بدون أقواس)
+      final GoogleSignIn googleSignIn = GoogleSignIn.instance;
+
+      // 2. تمرير الـ ID الإجباري في دالة التهيئة (initialize)
+      await googleSignIn.initialize(
+        serverClientId: '533950970964-r7o4d03g7pobe98s0b31haq8ej22gnou.apps.googleusercontent.com',
+      );
+
+      // 3. فتح شاشة اختيار حساب جوجل (بالدالة الجديدة authenticate)
+      final GoogleSignInAccount? googleUser = await googleSignIn.authenticate();
+
+      if (googleUser == null) {
+        emit(AuthError('تم إلغاء تسجيل الدخول'));
+        return;
+      }
+
+      // 4. استخراج التوثيق (idToken فقط لأن الفايربيز مش بيشترط accessToken في التحديث الجديد)
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
+      );
+
+      // 5. التسجيل في الفايربيز
+      UserCredential userCredential = await _auth.signInWithCredential(credential);
+      String uid = userCredential.user!.uid;
+
+      // 6. التحقق من المستخدم في الداتابيز
+      DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+
+      if (!doc.exists) {
+        UserModel userModel = UserModel(
+          uId: uid,
+          name: userCredential.user!.displayName ?? 'مستخدم جوجل',
+          email: userCredential.user!.email ?? '',
+          phone: userCredential.user!.phoneNumber ?? '',
+          profileImage: userCredential.user!.photoURL ?? '',
+          location: '',
+          createdAt: DateTime.now().toIso8601String(),
+        );
+
+        await _firestore.collection('users').doc(uid).set(userModel.toMap());
+
+        await CacheHelper.saveData(key: 'is_new_user_$uid', value: true);
+        await CacheHelper.saveData(key: 'uid', value: uid);
+
+        currentUser = userModel;
+        _fetchAndSaveLocationSilently();
+
+        emit(AuthNeedsSurvey(uid));
+      } else {
+        currentUser = UserModel.fromJson(doc.data() as Map<String, dynamic>);
+        await CacheHelper.saveData(key: 'uid', value: uid);
+
+        _fetchAndSaveLocationSilently();
+
+        bool isNewUser = CacheHelper.getData(key: 'is_new_user_$uid') ?? false;
+        bool surveyCompleted = CacheHelper.getData(key: 'survey_completed') ?? false;
+
+        if (isNewUser && !surveyCompleted) {
+          emit(AuthNeedsSurvey(uid));
+        } else {
+          emit(AuthSuccess(uid));
+        }
+      }
+    } catch (e) {
+      if (e is GoogleSignInException && e.code == GoogleSignInExceptionCode.canceled) {
+        emit(AuthError('تم إلغاء تسجيل الدخول'));
+      } else {
+        emit(AuthError("حدث خطأ أثناء تسجيل الدخول بجوجل: ${e.toString()}"));
+      }
+    }
+  }
+
   Future<void> getUserData() async {
     emit(GetUserLoading());
     String? uid = CacheHelper.getData(key: 'uid');
@@ -129,6 +205,7 @@ class AuthCubit extends Cubit<AuthState> {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled(); if (!serviceEnabled) return;
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) { permission = await Geolocator.requestPermission(); if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) { return; } }
+
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
       if (placemarks.isNotEmpty) {

@@ -70,7 +70,7 @@ class MainLayout extends StatelessWidget {
     return ShowCaseWidget(
       builder: (context) => const MainLayoutContent(),
       blurValue: 1.5,
-      disableBarrierInteraction: true,
+      disableBarrierInteraction: false,
     );
   }
 }
@@ -85,13 +85,14 @@ class MainLayoutContent extends StatefulWidget {
 class _MainLayoutContentState extends State<MainLayoutContent> {
   int _currentIndex = 0;
 
+  late PageController _pageController;
+
   bool _isTourBlocking = false;
   double? _aiButtonX;
   double? _aiButtonY;
   bool _isAiHidden = false;
   bool _isHiddenLeft = false;
 
-  // 🔥 Keys عشان نعمل refresh لكل صفحة لما اليوزر يضغط على نفس التاب 🔥
   final List<GlobalKey> _screenKeys = [
     GlobalKey(),
     GlobalKey(),
@@ -100,20 +101,22 @@ class _MainLayoutContentState extends State<MainLayoutContent> {
     GlobalKey(),
   ];
 
-  // لازم تبقى getter عشان لما الـ Key يتغير، فلاتر يحس بيه ويبني الصفحة من جديد
+  // 🔥 غلفنا الصفحات بـ KeepPageAlive عشان تحفظ مكان السكرول والداتا بتاعتها
   List<Widget> get _screens => [
-    HomeScreen(key: _screenKeys[0]),
-    CompareScreen(key: _screenKeys[1]),
-    PartsScreen(key: _screenKeys[2]),
-    MyCarScreen(key: _screenKeys[3]),
-    ProfileScreen(key: _screenKeys[4]),
+    KeepPageAlive(key: ValueKey(_screenKeys[0]), child: HomeScreen(key: _screenKeys[0])),
+    KeepPageAlive(key: ValueKey(_screenKeys[1]), child: CompareScreen(key: _screenKeys[1])),
+    KeepPageAlive(key: ValueKey(_screenKeys[2]), child: PartsScreen(key: _screenKeys[2])),
+    KeepPageAlive(key: ValueKey(_screenKeys[3]), child: MyCarScreen(key: _screenKeys[3])),
+    KeepPageAlive(key: ValueKey(_screenKeys[4]), child: ProfileScreen(key: _screenKeys[4])),
   ];
 
   @override
   void initState() {
     super.initState();
 
-    bool isFirst = CacheHelper.getData(key: 'gearup_tour_v65') ?? true;
+    _pageController = PageController(initialPage: 0);
+
+    bool isFirst = CacheHelper.getData(key: 'gearup_tour_v68') ?? true;
     if (isFirst) _isTourBlocking = true;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -121,14 +124,18 @@ class _MainLayoutContentState extends State<MainLayoutContent> {
     });
   }
 
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   void _checkAndStartTour() {
-    bool isFirstTime = CacheHelper.getData(key: 'gearup_tour_v65') ?? true;
-    print('🎯 Tour check v65: isFirstTime=$isFirstTime');
+    bool isFirstTime = CacheHelper.getData(key: 'gearup_tour_v68') ?? true;
     if (!isFirstTime) return;
 
     Future.delayed(const Duration(seconds: 2), () {
       if (!mounted) return;
-      print('🎯 Tour starting v65...');
 
       ShowCaseWidget.of(context).startShowCase([
         AppTourKeys.searchKey,
@@ -147,20 +154,28 @@ class _MainLayoutContentState extends State<MainLayoutContent> {
       ]);
 
       setState(() => _isTourBlocking = false);
-      CacheHelper.saveData(key: 'gearup_tour_v65', value: false);
+      CacheHelper.saveData(key: 'gearup_tour_v68', value: false);
     });
   }
 
   void _onNavItemTap(int index) {
     if (_currentIndex == index) {
-      // 🔥 نفس التاب = إعطاء Key جديد بيمسح الـ State بتاعت الصفحة دي بس ويعملها Refresh 🔥
       setState(() {
         _screenKeys[index] = GlobalKey();
       });
     } else {
-      // 🔥 تاب تاني = روح عليه واحتفظ بمكان الـ scroll بفضل الـ IndexedStack 🔥
-      setState(() => _currentIndex = index);
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     }
+  }
+
+  void _onPageChanged(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
   }
 
   @override
@@ -175,51 +190,48 @@ class _MainLayoutContentState extends State<MainLayoutContent> {
       _aiButtonY = size.height - 180;
     }
 
-    return Scaffold(
-      backgroundColor: screenBgColor,
-      body: Stack(
-        children: [
-          SafeArea(
-            // 🔥 استخدمنا IndexedStack بدل PageView عشان يحفظ الشاشات في الميموري 🔥
-            child: IndexedStack(
-              index: _currentIndex,
-              children: _screens,
-            ),
-          ),
-          if (_isAiHidden) _buildHiddenAiArrow(isDark) else _buildDraggableAiButton(isDark),
-          if (_isTourBlocking)
-            Positioned.fill(
-              child: AbsorbPointer(
-                absorbing: true,
-                child: Container(color: Colors.transparent),
+    // 🔥 السحر هنا: غلفنا الـ Scaffold كله عشان نمنع اللمس نهائياً لحد ما الجولة تبدأ 🔥
+    return AbsorbPointer(
+      absorbing: _isTourBlocking,
+      child: Scaffold(
+        backgroundColor: screenBgColor,
+        body: Stack(
+          children: [
+            SafeArea(
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: _onPageChanged,
+                physics: const BouncingScrollPhysics(),
+                children: _screens,
               ),
             ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-        decoration: BoxDecoration(
-          color: navBarColor,
-          border: Border(top: BorderSide(color: isDark ? Colors.white10 : Colors.black12, width: 1)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.4 : 0.05), blurRadius: 10, offset: const Offset(0, -4))],
+            if (_isAiHidden) _buildHiddenAiArrow(isDark) else _buildDraggableAiButton(isDark),
+          ],
         ),
-        child: SizedBox(
-          height: 65,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(0, Icons.home_outlined, Icons.home, 'الرئيسية', null, null, null),
-              _buildNavItem(1, Icons.compare_arrows, Icons.compare_arrows, 'مقارنة', AppTourKeys.compareNavKey, 'صفحة المقارنة', 'قارن بين سيارتين لمعرفة الأفضل.'),
-              _buildNavItem(2, Icons.build_outlined, Icons.build, 'قطع غيار', AppTourKeys.partsNavKey, 'قطع الغيار', 'ابحث عن قطع غيار لسيارتك.'),
-              _buildNavItem(3, Icons.directions_car_outlined, Icons.directions_car, 'سيارتي', AppTourKeys.myCarNavKey, 'جراجك الرقمي', 'تابع صيانات ومصاريف سيارتك.'),
-              _buildNavItem(4, Icons.person_outline, Icons.person, 'حسابي', AppTourKeys.profileNavKey, 'حسابك الشخصي', 'كل إعداداتك وإعلاناتك هنا.'),
-            ],
+        bottomNavigationBar: Container(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
+          decoration: BoxDecoration(
+            color: navBarColor,
+            border: Border(top: BorderSide(color: isDark ? Colors.white10 : Colors.black12, width: 1)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.4 : 0.05), blurRadius: 10, offset: const Offset(0, -4))],
+          ),
+          child: SizedBox(
+            height: 65,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavItem(0, Icons.home_outlined, Icons.home, AppLang.tr(context, 'nav_home') ?? 'الرئيسية', null, null, null),
+                _buildNavItem(1, Icons.compare_arrows, Icons.compare_arrows, AppLang.tr(context, 'nav_compare') ?? 'مقارنة', AppTourKeys.compareNavKey, AppLang.tr(context, 'tour_compare_title') ?? 'صفحة المقارنة', AppLang.tr(context, 'tour_compare_desc') ?? 'قارن بين سيارتين لمعرفة الأفضل.'),
+                _buildNavItem(2, Icons.build_outlined, Icons.build, AppLang.tr(context, 'nav_parts') ?? 'قطع غيار', AppTourKeys.partsNavKey, AppLang.tr(context, 'tour_parts_title') ?? 'قطع الغيار', AppLang.tr(context, 'tour_parts_desc') ?? 'ابحث عن قطع غيار لسيارتك.'),
+                _buildNavItem(3, Icons.directions_car_outlined, Icons.directions_car, AppLang.tr(context, 'nav_my_car') ?? 'سيارتي', AppTourKeys.myCarNavKey, AppLang.tr(context, 'tour_my_car_title') ?? 'جراجك الرقمي', AppLang.tr(context, 'tour_my_car_desc') ?? 'تابع صيانات ومصاريف سيارتك.'),
+                _buildNavItem(4, Icons.person_outline, Icons.person, AppLang.tr(context, 'nav_profile') ?? 'حسابي', AppTourKeys.profileNavKey, AppLang.tr(context, 'tour_profile_title') ?? 'حسابك الشخصي', AppLang.tr(context, 'tour_profile_desc') ?? 'كل إعداداتك وإعلاناتك هنا.'),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-
   Widget _buildNavItem(int index, IconData icon, IconData activeIcon, String label, GlobalKey? showcaseKey, String? title, String? desc) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSelected = _currentIndex == index;
@@ -252,8 +264,8 @@ class _MainLayoutContentState extends State<MainLayoutContent> {
       top: _aiButtonY,
       child: LuxuriousShowcase(
         showcaseKey: AppTourKeys.aiKey,
-        title: 'المساعد الذكي',
-        description: 'اسأل الذكاء الاصطناعي عن أي سيارة وسيجيبك فوراً.',
+        title: AppLang.tr(context, 'tour_ai_title') ?? 'المساعد الذكي',
+        description: AppLang.tr(context, 'tour_ai_desc') ?? 'اسأل الذكاء الاصطناعي عن أي سيارة وسيجيبك فوراً.',
         child: GestureDetector(
           onPanUpdate: (details) {
             setState(() {
@@ -297,5 +309,25 @@ class _MainLayoutContentState extends State<MainLayoutContent> {
         ),
       ),
     );
+  }
+}
+
+// 🔥 الوديجت السحرية اللي بتحافظ على حالة الصفحة ومكان السكرول 🔥
+class KeepPageAlive extends StatefulWidget {
+  final Widget child;
+  const KeepPageAlive({super.key, required this.child});
+
+  @override
+  State<KeepPageAlive> createState() => _KeepPageAliveState();
+}
+
+class _KeepPageAliveState extends State<KeepPageAlive> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // ده اللي بيمنع الفلاتر إنه يقتل الصفحة
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

@@ -24,8 +24,8 @@ class MarketCubit extends Cubit<MarketState> {
   final cloudinary = CloudinaryPublic('dfawviyf3', 'zclpevpk', cache: false);
   final Dio _dio = Dio();
 
-  // 🔥 رابط السيرفر الموحد بتاع Replit (مفيش أي API Keys مكشوفة هنا خالص) 🔥
-  final String _baseUrl = 'https://d897c33f-6257-4a85-9126-2bc9c6be829e-00-dd6nn6kccr87.spock.replit.dev';
+// 🔥 رابط السيرفر الموحد الجديد بتاع Back4App (مفيش أي API Keys مكشوفة هنا خالص) 🔥
+  final String _baseUrl = 'https://gear-up-backend.vercel.app';
   int _dynamicSequenceIndex = 0;
   List<CarModel> carsList = [];
   List<File> selectedCarImages = [];
@@ -131,6 +131,16 @@ class MarketCubit extends Cubit<MarketState> {
     if (isLoadMore && (isSearchingMore || hasReachedMaxSearch)) return;
 
     if (!isLoadMore) {
+      // 🔥 بـدايـة الـتـعـديـل: حفظ كلمة البحث في الكاش بحد أقصى 10 كلمات بدون التأثير على أي شيء آخر 🔥
+      List<String> searchHistory = CacheHelper.getStringList(key: 'search_history') ?? [];
+      searchHistory.remove(query.trim()); // لو الكلمة موجودة بنمسحها عشان تتضاف كأحدث حاجة
+      searchHistory.insert(0, query.trim()); // بنضيفها في الأول
+      if (searchHistory.length > 10) {
+        searchHistory = searchHistory.sublist(0, 10); // الليميت: لو زادوا عن 10 بنحتفظ بأحدث 10 بس
+      }
+      CacheHelper.saveData(key: 'search_history', value: searchHistory); // بنحفظ السجل النظيف
+      // 🔥 نـهـايـة الـتـعـديـل 🔥
+
       emit(SearchCarsLoading());
       searchResults.clear();
       searchApiOffset = 0; // 🔥 تصفير عداد الـ API
@@ -269,12 +279,11 @@ class MarketCubit extends Cubit<MarketState> {
     searchResults.clear();
     _loadedSearchModels.clear();
     searchApiOffset = 0;
-    _currentSearchYear = _currentYear;
+    _currentSearchYear = _currentYear; // 🔥 ممسحتش اللستة هنا عشان دي متغيرة
     hasReachedMaxSearch = false; // 🔥 حطيناها جوه الدالة في مكانها الصح
     emit(MarketInitial());
   }
   bool isSearchingCategoryAPI = false;
-
   Future<void> searchCategoryCarsFromAI(String query, String categoryTitle) async {
     if (isSearchingCategoryAPI) return;
     isSearchingCategoryAPI = true; emit(SearchCarsLoadingMore());
@@ -539,7 +548,12 @@ class MarketCubit extends Cubit<MarketState> {
   Future<void> getCars() async {
     emit(GetCarsLoading());
     try {
-      final results = await Future.wait([_firestore.collection('cars').get(), _firestore.collection('promoted_cars').get()]);
+      // 🚀 التعديل هنا فقط: ضفنا orderBy و limit لجلب أحدث 40 عربية فقط بدل كل الداتا 🚀
+      final results = await Future.wait([
+        _firestore.collection('cars').orderBy('createdAt', descending: true).limit(40).get(),
+        _firestore.collection('promoted_cars').get()
+      ]);
+
       final aiCarsSnapshot = results[0]; final promotedCarsSnapshot = results[1];
       carsList.clear(); promotedCarsList.clear(); newCarsList.clear(); usedCarsList.clear(); dynamicBottomSections.clear(); clearFilters(); shownDynamicCarIds.clear();
       DateTime fiveMonthsAgo = DateTime.now().subtract(const Duration(days: 150));

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../home/screens/main_layout.dart'; // مسار ملف المين لاي اوت
+import '../../home/screens/main_layout.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
 import '../screens/car_details_screen.dart';
@@ -69,9 +69,29 @@ class CarCard extends StatelessWidget {
                   ),
                 ),
                 if (isActuallyPromoted)
-                  Positioned(top: 16, left: 16, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: const Color(0xFFF39C12), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: const Color(0xFFF39C12).withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]), child: Row(children: [const Icon(Icons.local_fire_department, color: Colors.white, size: 14), const SizedBox(width: 4), Text('ممول', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])) )
+                  Positioned(
+                      top: 16,
+                      left: 16,
+                      child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(color: const Color(0xFFF39C12), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: const Color(0xFFF39C12).withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]),
+                          child: Row(children: [
+                            const Icon(Icons.local_fire_department, color: Colors.white, size: 14),
+                            const SizedBox(width: 4),
+                            Text(AppLang.tr(context, 'promoted') ?? 'ممول', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))
+                          ])))
                 else if (isTopRated)
-                  Positioned(top: 16, left: 16, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]), child: Row(children: [const Icon(Icons.star, color: Colors.white, size: 14), const SizedBox(width: 4), Text('أعلى تقييم', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])) ),
+                  Positioned(
+                      top: 16,
+                      left: 16,
+                      child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]),
+                          child: Row(children: [
+                            const Icon(Icons.star, color: Colors.white, size: 14),
+                            const SizedBox(width: 4),
+                            Text(AppLang.tr(context, 'Top Rated') ?? 'أعلى تقييم', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))
+                          ]))) ,
 
                 Positioned(
                   top: 16, right: 16,
@@ -83,13 +103,21 @@ class CarCard extends StatelessWidget {
                       // 🔥 زرار القلب
                       Widget heartBtn = _buildIconButton(icon: isSaved ? Icons.favorite : Icons.favorite_border, iconColor: isSaved ? Colors.redAccent : (isDark ? Colors.white : AppColors.secondary), isDark: isDark, onTap: () => cubit.toggleSavedCar(car));
                       if (saveKey != null) {
-                        heartBtn = LuxuriousShowcase(showcaseKey: saveKey!, title: 'حفظ السيارة', description: 'اضغط هنا لحفظ السيارة في مفضلتك للرجوع إليها لاحقاً.', child: heartBtn);
+                        heartBtn = LuxuriousShowcase(
+                            showcaseKey: saveKey!,
+                            title: AppLang.tr(context, 'tour_save_car_title') ?? 'حفظ السيارة',
+                            description: AppLang.tr(context, 'tour_save_car_desc') ?? 'اضغط هنا لحفظ السيارة في مفضلتك للرجوع إليها لاحقاً.',
+                            child: heartBtn);
                       }
 
                       // 🔥 زرار المقارنة
                       Widget compareBtn = _buildIconButton(icon: Icons.compare_arrows, iconColor: isCompared ? Colors.white : (isDark ? Colors.white : AppColors.secondary), isDark: isDark, backgroundColor: isCompared ? AppColors.primary : null, onTap: () => cubit.toggleCompareCar(car, context));
                       if (compareKey != null) {
-                        compareBtn = LuxuriousShowcase(showcaseKey: compareKey!, title: 'مقارنة سريعة', description: 'أضف هذه السيارة لجدول المقارنة لمعرفة الفروق.', child: compareBtn);
+                        compareBtn = LuxuriousShowcase(
+                            showcaseKey: compareKey!,
+                            title: AppLang.tr(context, 'tour_quick_compare_title') ?? 'مقارنة سريعة',
+                            description: AppLang.tr(context, 'tour_quick_compare_desc') ?? 'أضف هذه السيارة لجدول المقارنة لمعرفة الفروق.',
+                            child: compareBtn);
                       }
 
                       return Column(children: [heartBtn, const SizedBox(height: 12), compareBtn]);
@@ -109,7 +137,15 @@ class CarCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(year, style: TextStyle(color: isDark ? Colors.white70 : AppColors.textSecondary, fontSize: 15, fontWeight: FontWeight.w500)), Row(children: [const Icon(Icons.star, color: Colors.orange, size: 18), const SizedBox(width: 4), Text(rating, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white : Colors.black87))])]),
                   const SizedBox(height: 16),
-                  SizedBox(width: double.infinity, child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [Expanded(flex: 3, child: FittedBox(fit: BoxFit.scaleDown, alignment: AlignmentDirectional.centerStart, child: Text(price, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w900, fontSize: 20)))), const SizedBox(width: 4), Expanded(flex: 2, child: Text('متوسط السعر', style: TextStyle(color: isDark ? Colors.white54 : AppColors.textHint, fontSize: 11, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis))])),
+                  SizedBox(
+                      width: double.infinity,
+                      child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(flex: 3, child: FittedBox(fit: BoxFit.scaleDown, alignment: AlignmentDirectional.centerStart, child: Text(price, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w900, fontSize: 20)))),
+                            const SizedBox(width: 4),
+                            Expanded(flex: 2, child: Text(AppLang.tr(context, 'average_price') ?? 'متوسط السعر', style: TextStyle(color: isDark ? Colors.white54 : AppColors.textHint, fontSize: 11, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis))
+                          ])),
                 ],
               ),
             ),

@@ -44,7 +44,6 @@ class CompareScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // 🔥 توحيد لون الخلفية للدارك مود الفخم 🔥
     final Color screenBgColor = isDark ? const Color(0xFF0A0F14) : const Color(0xFFE3F2FD);
 
     return Scaffold(
@@ -53,7 +52,6 @@ class CompareScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        // 🔥 خلينا دي بـ false عشان فلاتر ميحطش سهم الرجوع الافتراضي من نفسه 🔥
         automaticallyImplyLeading: false,
         title: Text(
           AppLang.tr(context, 'compare_vehicles') ?? 'مقارنة السيارات',
@@ -79,7 +77,7 @@ class CompareScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    "قم بإضافة سيارات من الشاشة الرئيسية",
+                    AppLang.tr(context, 'add_cars_from_home') ?? "قم بإضافة سيارات من الشاشة الرئيسية",
                     style: TextStyle(color: isDark ? Colors.white54 : AppColors.textSecondary, fontSize: 14),
                   ),
                 ],
@@ -101,7 +99,6 @@ class CompareScreen extends StatelessWidget {
                     ),
                   ),
 
-                  // 1. هيدر السيارات (الصور والأسعار) متجاوب مع العدد 2 أو 3
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
                     child: Row(
@@ -118,10 +115,7 @@ class CompareScreen extends StatelessWidget {
                   ),
 
                   const SizedBox(height: 24),
-
-                  // 2. جدول المواصفات متجاوب مع العدد 2 أو 3
                   _buildModernComparisonTable(context, compareCars, isDark, carCount),
-
                   const SizedBox(height: 60),
                 ],
               ),
@@ -132,13 +126,11 @@ class CompareScreen extends StatelessWidget {
     );
   }
 
-  // 🔥 هيدر العربية متجاوب مع عدد السيارات ويدعم الضغط لفتح التفاصيل 🔥
   Widget _buildCarHeader(BuildContext context, CarModel car, bool isDark, MarketCubit cubit, Color? priceColor, int carCount) {
     final imageUrl = car.images.isNotEmpty ? car.images.first : null;
     const fallbackImage = 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?q=80&w=800&auto=format&fit=crop';
-    final price = "EGP ${car.price.toStringAsFixed(0)}";
+    final price = "${AppLang.tr(context, 'currency_egp') ?? 'EGP'} ${car.price.toStringAsFixed(0)}";
 
-    // 💡 ديناميكية الحجم: لو عربيتين نكبر الصورة لـ 150 عشان تبقى واضحة جداً، لو 3 نصغرها لـ 105 عشان متضربش مساحة 💡
     double imageHeight = carCount == 3 ? 105 : 150;
     double modelFontSize = carCount == 3 ? 13 : 16;
     double priceFontSize = carCount == 3 ? 13 : 16;
@@ -149,33 +141,27 @@ class CompareScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 🔥 الضغط على الصورة أو الاسم ينقلك للتفاصيل 🔥
           GestureDetector(
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => CarDetailsScreen(car: car, isPromoted: false)));            },
+              Navigator.push(context, MaterialPageRoute(builder: (context) => CarDetailsScreen(car: car, isPromoted: false)));
+            },
             child: Column(
               children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      height: imageHeight,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        // 🔥 توحيد لون كروت الصور للدارك مود الفخم 🔥
-                        color: isDark ? const Color(0xFF161E27) : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: imageUrl != null
-                            ? CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover, errorWidget: (c, u, e) => CachedNetworkImage(imageUrl: fallbackImage, fit: BoxFit.cover))
-                            : CachedNetworkImage(imageUrl: fallbackImage, fit: BoxFit.cover),
-                      ),
-                    ),
-                  ],
+                Container(
+                  height: imageHeight,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF161E27) : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: imageUrl != null
+                        ? CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover, errorWidget: (c, u, e) => CachedNetworkImage(imageUrl: fallbackImage, fit: BoxFit.cover))
+                        : CachedNetworkImage(imageUrl: fallbackImage, fit: BoxFit.cover),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Text(car.make.toUpperCase(), style: const TextStyle(color: AppColors.textHint, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0), textAlign: TextAlign.center),
@@ -184,11 +170,9 @@ class CompareScreen extends StatelessWidget {
               ],
             ),
           ),
-
           const SizedBox(height: 6),
           Text(price, style: TextStyle(color: priceColor ?? AppColors.primary, fontWeight: FontWeight.w900, fontSize: priceFontSize)),
           const SizedBox(height: 10),
-
           GestureDetector(
             onTap: () => cubit.toggleCompareCar(car, context),
             child: Container(
@@ -222,9 +206,9 @@ class CompareScreen extends StatelessWidget {
           _buildSpecRowCard(context, AppLang.tr(context, 'cc') ?? "سعة المحرك", cars.map((c) => c.cc.isNotEmpty ? c.cc : "N/A").toList(), 'cc', isDark, carCount),
           _buildSpecRowCard(context, AppLang.tr(context, 'hp') ?? "قوة الحصان", cars.map((c) => c.hp.isNotEmpty ? c.hp : "N/A").toList(), 'hp', isDark, carCount),
           _buildSpecRowCard(context, AppLang.tr(context, 'torque') ?? "عزم الدوران", cars.map((c) => c.torque.isNotEmpty ? c.torque : "N/A").toList(), 'torque', isDark, carCount),
-          _buildSpecRowCard(context, AppLang.tr(context, 'mileage') ?? "المسافة", cars.map((c) => c.mileage.isNotEmpty ? "${c.mileage} km" : "0 km").toList(), 'mileage', isDark, carCount),
+          _buildSpecRowCard(context, AppLang.tr(context, 'mileage') ?? "المسافة", cars.map((c) => c.mileage.isNotEmpty ? "${c.mileage} ${AppLang.tr(context, 'km') ?? 'km'}" : "0 ${AppLang.tr(context, 'km') ?? 'km'}").toList(), 'mileage', isDark, carCount),
           _buildSpecRowCard(context, AppLang.tr(context, 'luggage_capacity') ?? "الشنطة", cars.map((c) => c.luggageCapacity.isNotEmpty ? c.luggageCapacity : "N/A").toList(), 'luggage', isDark, carCount),
-          _buildSpecRowCard(context, AppLang.tr(context, 'transmission') ?? "ناقل الحركة", cars.map((c) => c.transmission.isNotEmpty ? c.transmission : "N/A").toList(), 'text', isDark, carCount),
+          _buildSpecRowCard(context, AppLang.tr(context, 'transmission') ?? "ناقل الحركة", cars.map((c) => c.transmission.isNotEmpty ? (AppLang.tr(context, c.transmission.toLowerCase()) ?? c.transmission) : "N/A").toList(), 'text', isDark, carCount),
           _buildSpecRowCard(context, AppLang.tr(context, 'condition') ?? "الحالة", cars.map((c) => AppLang.tr(context, c.condition.toLowerCase()) ?? c.condition).toList(), 'text', isDark, carCount),
         ],
       ),
@@ -233,8 +217,6 @@ class CompareScreen extends StatelessWidget {
 
   Widget _buildSpecRowCard(BuildContext context, String title, List<String> values, String specType, bool isDark, int carCount) {
     List<Color?> comparisonColors = _getComparisonColors(values, specType, isDark);
-
-    // تصغير الخط قليلاً لو بقوا 3 عربيات عشان مفيش كلام ينزل سطر جديد ويبوظ الشكل
     double valFontSize = carCount == 3 ? 13 : 16;
     double titleFontSize = carCount == 3 ? 12 : 14;
 
@@ -242,7 +224,6 @@ class CompareScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       decoration: BoxDecoration(
-        // 🔥 توحيد لون كروت المواصفات للدارك مود الفخم 🔥
         color: isDark ? const Color(0xFF161E27) : Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: isDark ? Colors.white10 : Colors.transparent),
@@ -272,16 +253,13 @@ class CompareScreen extends StatelessWidget {
               int idx = entry.key;
               String val = entry.value;
               Color? valColor = comparisonColors[idx];
-
               Color defaultColor = isDark ? Colors.white : Colors.black87;
-              bool isHighlighted = valColor != null;
-
               return Expanded(
                 child: Text(
                   val,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontWeight: isHighlighted ? FontWeight.w900 : FontWeight.bold,
+                    fontWeight: valColor != null ? FontWeight.w900 : FontWeight.bold,
                     color: valColor ?? defaultColor,
                     fontSize: valFontSize,
                   ),

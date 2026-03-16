@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // 🔥 المكتبة دي عشان نجبره يكتب أرقام بس 🔥
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
 import 'login_screen.dart';
@@ -28,8 +28,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final Dio _dio = Dio();
 
-  final String _baseUrl = 'https://d897c33f-6257-4a85-9126-2bc9c6be829e-00-dd6nn6kccr87.spock.replit.dev';
-
+  final String _baseUrl = 'https://gear-up-backend.vercel.app';
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
@@ -39,7 +38,6 @@ class _SignupScreenState extends State<SignupScreen> {
         '$_baseUrl/api/send-welcome-email',
         data: {'userEmail': userEmail, 'userName': userName},
       );
-      debugPrint('Welcome email sent successfully to $userEmail!');
     } catch (e) {
       debugPrint('Welcome email failed: $e');
     }
@@ -53,6 +51,7 @@ class _SignupScreenState extends State<SignupScreen> {
     return BlocBuilder<LocaleCubit, Locale>(
       builder: (context, locale) {
         String currentLang = locale.languageCode;
+        bool isAr = currentLang == 'ar';
 
         return Scaffold(
           backgroundColor: screenBgColor,
@@ -68,7 +67,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 ShaderMask(
                   blendMode: BlendMode.srcIn,
                   shaderCallback: (bounds) => LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: isDark ? [const Color(0xFF64B5F6), const Color(0xFF1976D2)] : [const Color(0xFF2E86AB), const Color(0xFF0A3656)]).createShader(bounds),
-                  child: Text("GEAR UP", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white, shadows: [Shadow(color: isDark ? const Color(0xFF64B5F6).withOpacity(0.6) : Colors.black.withOpacity(0.2), offset: Offset(0, isDark ? 0 : 2), blurRadius: isDark ? 8 : 4)])),
+                  child: Text("GEAR UP", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white)),
                 ),
               ],
             ),
@@ -76,17 +75,12 @@ class _SignupScreenState extends State<SignupScreen> {
           ),
           body: BlocConsumer<AuthCubit, AuthState>(
             listener: (context, state) {
-              if (state is AuthSuccess) {
+              if (state is AuthSuccess || state is AuthNeedsSurvey) {
                 Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const OnboardingSurveyScreen()), (route) => false);
               }
               else if (state is AuthNeedsVerification) {
                 _sendWelcomeEmail(_emailController.text.trim(), _nameController.text.trim());
-
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const EmailVerificationScreen()),
-                      (route) => false,
-                );
+                Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const EmailVerificationScreen()), (route) => false);
               }
               else if (state is AuthError) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
@@ -104,7 +98,67 @@ class _SignupScreenState extends State<SignupScreen> {
                       Text(AppLang.tr(context, 'create_account') ?? "Create Account", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
                       const SizedBox(height: 8),
                       Text(AppLang.tr(context, 'join_gear_up') ?? "Join GEAR UP today", style: TextStyle(color: isDark ? Colors.white70 : AppColors.textSecondary, fontSize: 16)),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 32),
+
+                      // 🔥 زرار جوجل البريميام 🔥
+                      Container(
+                        width: double.infinity,
+                        height: 58,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1A1F26) : Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: isDark ? Colors.white.withOpacity(0.1) : Colors.white,
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isDark ? Colors.black.withOpacity(0.4) : AppColors.primary.withOpacity(0.1),
+                              blurRadius: 15,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: state is AuthLoading ? null : () => context.read<AuthCubit>().signInWithGoogle(),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Image.asset('assets/images/google.png', height: 24),
+                                const SizedBox(width: 14),
+                                Text(
+                                  AppLang.tr(context, 'continue_with_google') ?? "Continue with Google",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? Colors.white : Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+
+                      // 🔥 الفاصل الشيك 🔥
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey[300], thickness: 1)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              AppLang.tr(context, 'or_sign_up_with_email') ?? "Or sign up with email",
+                              style: TextStyle(color: isDark ? Colors.white38 : Colors.grey[500], fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                          ),
+                          Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey[300], thickness: 1)),
+                        ],
+                      ),
+                      const SizedBox(height: 30),
 
                       _buildLabel(AppLang.tr(context, 'full_name') ?? "Full Name", isDark),
                       TextFormField(
@@ -118,7 +172,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       _buildLabel(AppLang.tr(context, 'email') ?? "Email", isDark),
                       TextFormField(
                         controller: _emailController,
-                        keyboardType: TextInputType.emailAddress, // 🔥 بيفتح كيبورد الإيميل الإنجليزي أوتوماتيك
+                        keyboardType: TextInputType.emailAddress,
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                         validator: (value) {
                           if (value == null || value.isEmpty) return 'Please enter your email';
@@ -133,11 +187,10 @@ class _SignupScreenState extends State<SignupScreen> {
                       TextFormField(
                         controller: _phoneController,
                         keyboardType: TextInputType.phone,
-                        // 🔥 دي بتجبر الكيبورد واليوزر إنه يكتب أرقام إنجليزي فقط 🔥
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        maxLength: 11, // بيمنع اليوزر إنه يكتب أكتر من 11 رقم
-                        // 🔥 ده بيخلي النص دايماً من اليسار لليمين مهما كانت لغة الموبايل
+                        maxLength: 11,
                         textDirection: TextDirection.ltr,
+                        textAlign: isAr ? TextAlign.right : TextAlign.left,
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                         validator: (value) {
                           if (value == null || value.isEmpty) return 'يرجى إدخال رقم الهاتف';
@@ -145,12 +198,7 @@ class _SignupScreenState extends State<SignupScreen> {
                           if (!value.startsWith('01')) return 'يجب أن يبدأ رقم الهاتف بـ 01';
                           return null;
                         },
-                        decoration: _inputDecoration(
-                          // \u200E ده رمز سحري بيخلي الأرقام معدولة في العربي
-                            "\u200E01012345678",
-                            Icons.phone_outlined,
-                            isDark
-                        ).copyWith(counterText: ""), // عشان يخفي العداد بتاع الحروف (0/11) اللي بيظهر تحت الحقل
+                        decoration: _inputDecoration("\u200E01012345678", Icons.phone_outlined, isDark).copyWith(counterText: ""),
                       ),
                       const SizedBox(height: 16),
 
@@ -162,8 +210,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         validator: (value) {
                           if (value == null || value.isEmpty) return 'Please enter your password';
                           if (value.length < 8) return 'Password must be at least 8 characters';
-                          if (!RegExp(r'[a-zA-Z]').hasMatch(value)) return 'Password must contain at least one letter';
-                          if (!RegExp(r'[0-9]').hasMatch(value)) return 'Password must contain at least one number';
                           return null;
                         },
                         decoration: _inputDecoration(AppLang.tr(context, 'password_hint') ?? "********", Icons.lock_outline, isDark).copyWith(
@@ -211,9 +257,9 @@ class _SignupScreenState extends State<SignupScreen> {
                           GestureDetector(onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen())), child: Text(AppLang.tr(context, 'login') ?? "Login", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold))),
                         ],
                       ),
-
                       const SizedBox(height: 40),
 
+                      // 🔥 زرار تغيير اللغة اللي كان ناقص 🔥
                       Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),

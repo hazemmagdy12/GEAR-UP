@@ -21,18 +21,16 @@ import '../../marketplace/cubit/market_state.dart';
 import '../../profile/screens/start_selling_screen.dart';
 import '../../marketplace/models/car_model.dart';
 import '../../auth/screens/login_screen.dart';
-// 🔥 AppTourKeys و LuxuriousShowcase موجودين في main_layout 🔥
 import 'main_layout.dart';
 
 // =================================================================
-// HomeScreen - بتلف الـ content بـ ShowCaseWidget عشان الجولة تشتغل
+// HomeScreen
 // =================================================================
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // 🔥 ShowCaseWidget موجود في main_layout - مش محتاجينه هنا 🔥
     return const HomeScreenContent();
   }
 }
@@ -132,37 +130,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
       } else if (_mainScrollController.offset <= 200 && _showQuickMenuIcon) {
         setState(() => _showQuickMenuIcon = false);
       }
-    });
-  }
-
-  // =================================================================
-  // 🔥 الجولة - بتشتغل بس أول مرة يفتح اليوزر الابليكيشن 🔥
-  // =================================================================
-  void _checkAndStartTour(BuildContext context) {
-    bool isFirstTime = CacheHelper.getData(key: 'gearup_tour_v65') ?? true;
-    print('🎯 Tour check: isFirstTime=$isFirstTime');
-    if (!isFirstTime) return;
-
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!mounted) return;
-      print('🎯 Tour starting now...');
-
-      if (_mainScrollController.hasClients) {
-        _mainScrollController.jumpTo(0);
-      }
-
-      // بس الـ keys اللي موجودة فعلاً في الهوم سكرين
-      List<GlobalKey> guaranteedKeys = [
-        AppTourKeys.searchKey,
-        AppTourKeys.filterKey,
-        AppTourKeys.savedItemsKey,
-        AppTourKeys.savedPartsKey,
-        AppTourKeys.nearbyKey,
-      ];
-
-      print('🎯 Keys count: ${guaranteedKeys.length}');
-      ShowCaseWidget.of(context).startShowCase(guaranteedKeys);
-      CacheHelper.saveData(key: 'gearup_tour_v65', value: false);
     });
   }
 
@@ -286,11 +253,78 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
 
   void _showGuestDialog(BuildContext context, String featureName) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    showDialog(context: context, builder: (ctx) => Dialog(backgroundColor: isDark ? const Color(0xFF161E27) : Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)), child: Padding(padding: const EdgeInsets.all(24.0), child: Column(mainAxisSize: MainAxisSize.min, children: [Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.lock_outline_rounded, size: 40, color: AppColors.primary)), const SizedBox(height: 20), Text(AppLang.tr(context, 'login_required') ?? "تسجيل الدخول مطلوب", style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.w900, fontSize: 20)), const SizedBox(height: 12), Text("عفواً، لا يمكنك $featureName كزائر.", textAlign: TextAlign.center, style: TextStyle(color: isDark ? Colors.white70 : AppColors.textSecondary, fontSize: 14)), const SizedBox(height: 32), SizedBox(width: double.infinity, child: ElevatedButton(onPressed: () { Navigator.pop(ctx); Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen())); }, style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))), child: const Text("تسجيل الدخول", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)))), const SizedBox(height: 12), SizedBox(width: double.infinity, child: TextButton(onPressed: () => Navigator.pop(ctx), child: Text("إلغاء", style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 15, fontWeight: FontWeight.bold))))]))));
+    showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+            backgroundColor: isDark ? const Color(0xFF161E27) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.lock_outline_rounded, size: 40, color: AppColors.primary)),
+                      const SizedBox(height: 20),
+                      Text(AppLang.tr(context, 'login_required') ?? "تسجيل الدخول مطلوب", style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.w900, fontSize: 20)),
+                      const SizedBox(height: 12),
+                      // 🔥 تم التعديل هنا لترجمة الرسالة باحترافية
+                      Text(
+                          "${AppLang.tr(context, 'sorry_cannot') ?? 'عفواً، لا يمكنك '} $featureName ${AppLang.tr(context, 'as_guest') ?? ' كزائر.'}",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: isDark ? Colors.white70 : AppColors.textSecondary, fontSize: 14)
+                      ),
+                      const SizedBox(height: 32),
+                      SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                              onPressed: () { Navigator.pop(ctx); Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen())); },
+                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                              // 🔥 تم التعديل هنا
+                              child: Text(AppLang.tr(context, 'login') ?? "تسجيل الدخول", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))
+                          )
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                          width: double.infinity,
+                          child: TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              // 🔥 تم التعديل هنا
+                              child: Text(AppLang.tr(context, 'cancel') ?? "إلغاء", style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 15, fontWeight: FontWeight.bold))
+                          )
+                      )
+                    ]
+                )
+            )
+        )
+    );
   }
 
   void _showPremiumQuickMenu(BuildContext context, bool isDark) {
-    showModalBottomSheet(context: context, backgroundColor: Colors.transparent, isScrollControlled: true, builder: (context) { return BackdropFilter(filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), child: Container(padding: const EdgeInsets.only(left: 20, right: 20, top: 12, bottom: 40), decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27).withOpacity(0.9) : Colors.white.withOpacity(0.9), borderRadius: const BorderRadius.vertical(top: Radius.circular(32))), child: Column(mainAxisSize: MainAxisSize.min, children: [Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))), const SizedBox(height: 32), Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildActionCard(isDark: isDark, title: 'Saved Cars', icon: Icons.favorite, iconColor: Colors.red.shade400, onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedCarsScreen())); }), _buildActionCard(isDark: isDark, title: 'Saved Parts', icon: Icons.build_outlined, iconColor: AppColors.primary, onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPartsScreen())); }), _buildActionCard(isDark: isDark, title: 'Find Nearby', icon: Icons.location_on_outlined, iconColor: const Color(0xFFE57373), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const NearbyLocationsScreen())); })])]))); });
+    showModalBottomSheet(context: context, backgroundColor: Colors.transparent, isScrollControlled: true, builder: (context) {
+      return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 12, bottom: 40),
+              decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27).withOpacity(0.9) : Colors.white.withOpacity(0.9), borderRadius: const BorderRadius.vertical(top: Radius.circular(32))),
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5), borderRadius: BorderRadius.circular(10))),
+                    const SizedBox(height: 32),
+                    Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // 🔥 تم التعديل هنا للغات
+                          _buildActionCard(isDark: isDark, title: AppLang.tr(context, 'saved_cars') ?? 'Saved Cars', icon: Icons.favorite, iconColor: Colors.red.shade400, onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedCarsScreen())); }),
+                          _buildActionCard(isDark: isDark, title: AppLang.tr(context, 'saved_parts') ?? 'Saved Parts', icon: Icons.build_outlined, iconColor: AppColors.primary, onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPartsScreen())); }),
+                          _buildActionCard(isDark: isDark, title: AppLang.tr(context, 'find_nearby') ?? 'Find Nearby', icon: Icons.location_on_outlined, iconColor: const Color(0xFFE57373), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const NearbyLocationsScreen())); })
+                        ]
+                    )
+                  ]
+              )
+          )
+      );
+    });
   }
 
   @override
@@ -315,8 +349,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
             if (state is GetCarsSuccess) {
               setState(() {});
               _loadTopRatedCars();
-              // 🔥 لو الكروت كانت فاضية وجت داتا دلوقتي نشغل الجولة 🔥
-              _checkAndStartTour(context);
             }
             else if (state is AddCarSuccess) { _initializeHomeLists(context.read<MarketCubit>()); _loadTopRatedCars(); }
             else if (state is SearchCarsSuccess || state is FetchExternalCarsSuccess) { _appendNewItemsToHomeLists(context.read<MarketCubit>()); }
@@ -419,60 +451,60 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
             );
 
             return Stack(
-                children: [
-            Column(
-            children: [
-            Padding(padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8), child: _buildTopBar(context, isDark)),
-            if (cubit.isFilterActive)
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [const Icon(Icons.tune, color: Colors.white, size: 20), const SizedBox(width: 8), Text(AppLang.tr(context, 'filtered_results') ?? 'Filtered Results', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15))]), GestureDetector(onTap: () => cubit.clearFilters(), child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), border: Border.all(color: Colors.white.withOpacity(0.4)), borderRadius: BorderRadius.circular(12)), child: Row(children: [const Icon(Icons.close, color: Colors.white, size: 14), const SizedBox(width: 4), Text(AppLang.tr(context, 'clear_filter') ?? 'Clear', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])) )]))),
+              children: [
+                Column(
+                  children: [
+                    Padding(padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8), child: _buildTopBar(context, isDark)),
+                    if (cubit.isFilterActive)
+                      Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [const Icon(Icons.tune, color: Colors.white, size: 20), const SizedBox(width: 8), Text(AppLang.tr(context, 'filtered_results') ?? 'Filtered Results', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15))]), GestureDetector(onTap: () => cubit.clearFilters(), child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), border: Border.all(color: Colors.white.withOpacity(0.4)), borderRadius: BorderRadius.circular(12)), child: Row(children: [const Icon(Icons.close, color: Colors.white, size: 14), const SizedBox(width: 4), Text(AppLang.tr(context, 'clear_filter') ?? 'Clear', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))])) )]))),
 
-            Expanded(
-            child: cubit.isFilterActive
-            ? mainScrollableContent
-                : RefreshIndicator(
-            key: _refreshIndicatorKey,
-            color: AppColors.primary,
-            backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
-            strokeWidth: 3.0,
-            onRefresh: _handleRefresh,
-            child: mainScrollableContent
-            ),
-            ),
-            ],
-            ),
+                    Expanded(
+                      child: cubit.isFilterActive
+                          ? mainScrollableContent
+                          : RefreshIndicator(
+                          key: _refreshIndicatorKey,
+                          color: AppColors.primary,
+                          backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+                          strokeWidth: 3.0,
+                          onRefresh: _handleRefresh,
+                          child: mainScrollableContent
+                      ),
+                    ),
+                  ],
+                ),
 
-            // 🔥 الـ Quick Menu Button مع الـ Showcase 🔥
-            AnimatedPositioned(
-            duration: Duration(milliseconds: _isDraggingQuickMenu ? 0 : 300),
-            curve: Curves.easeOutCubic,
-            left: currentX,
-            top: _quickMenuPosition.dy,
-            child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 300),
-            opacity: _showQuickMenuIcon ? 1.0 : 0.0,
-            child: GestureDetector(
-            onPanStart: (details) { _quickMenuTimer?.cancel(); setState(() { _isDraggingQuickMenu = true; _isQuickMenuCollapsed = false; }); },
-            onPanUpdate: (details) { setState(() { double newX = _quickMenuPosition.dx + details.delta.dx; double newY = _quickMenuPosition.dy + details.delta.dy; newX = newX.clamp(0.0, screenWidth - iconContainerSize); newY = newY.clamp(120.0, screenHeight - 120.0); _quickMenuPosition = Offset(newX, newY); }); },
-            onPanEnd: (details) { setState(() { _isDraggingQuickMenu = false; double snapX = (_quickMenuPosition.dx > screenWidth / 2) ? screenWidth - iconContainerSize : 0.0; _quickMenuPosition = Offset(snapX, _quickMenuPosition.dy); _startQuickMenuTimer(); }); },
-            onTap: () { if (_isQuickMenuCollapsed) { setState(() { _isQuickMenuCollapsed = false; _startQuickMenuTimer(); }); } else { _showPremiumQuickMenu(context, isDark); _startQuickMenuTimer(); } },
-            child: ClipRRect(
-            borderRadius: BorderRadius.horizontal(left: Radius.circular(isLeft && _isQuickMenuCollapsed ? 0 : 16), right: Radius.circular(!isLeft && _isQuickMenuCollapsed ? 0 : 16)),
-            child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: _isQuickMenuCollapsed ? 56.0 : iconContainerSize,
-            height: iconContainerSize,
-            decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27).withOpacity(0.85) : Colors.white.withOpacity(0.8), border: Border.all(color: isDark ? Colors.white10 : AppColors.primary.withOpacity(0.5), width: 1.5)),
-            child: Center(child: _isQuickMenuCollapsed ? Icon(isLeft ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_new_rounded, color: AppColors.primary, size: 20) : const Icon(Icons.widgets_rounded, color: AppColors.primary, size: 28)),
-            ),
-            ),
-            ),
-            ),
-            ),
-            ),
+                // 🔥 الـ Quick Menu Button مع الـ Showcase 🔥
+                AnimatedPositioned(
+                  duration: Duration(milliseconds: _isDraggingQuickMenu ? 0 : 300),
+                  curve: Curves.easeOutCubic,
+                  left: currentX,
+                  top: _quickMenuPosition.dy,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 300),
+                    opacity: _showQuickMenuIcon ? 1.0 : 0.0,
+                    child: GestureDetector(
+                      onPanStart: (details) { _quickMenuTimer?.cancel(); setState(() { _isDraggingQuickMenu = true; _isQuickMenuCollapsed = false; }); },
+                      onPanUpdate: (details) { setState(() { double newX = _quickMenuPosition.dx + details.delta.dx; double newY = _quickMenuPosition.dy + details.delta.dy; newX = newX.clamp(0.0, screenWidth - iconContainerSize); newY = newY.clamp(120.0, screenHeight - 120.0); _quickMenuPosition = Offset(newX, newY); }); },
+                      onPanEnd: (details) { setState(() { _isDraggingQuickMenu = false; double snapX = (_quickMenuPosition.dx > screenWidth / 2) ? screenWidth - iconContainerSize : 0.0; _quickMenuPosition = Offset(snapX, _quickMenuPosition.dy); _startQuickMenuTimer(); }); },
+                      onTap: () { if (_isQuickMenuCollapsed) { setState(() { _isQuickMenuCollapsed = false; _startQuickMenuTimer(); }); } else { _showPremiumQuickMenu(context, isDark); _startQuickMenuTimer(); } },
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.horizontal(left: Radius.circular(isLeft && _isQuickMenuCollapsed ? 0 : 16), right: Radius.circular(!isLeft && _isQuickMenuCollapsed ? 0 : 16)),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            width: _isQuickMenuCollapsed ? 56.0 : iconContainerSize,
+                            height: iconContainerSize,
+                            decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27).withOpacity(0.85) : Colors.white.withOpacity(0.8), border: Border.all(color: isDark ? Colors.white10 : AppColors.primary.withOpacity(0.5), width: 1.5)),
+                            child: Center(child: _isQuickMenuCollapsed ? Icon(isLeft ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_new_rounded, color: AppColors.primary, size: 20) : const Icon(Icons.widgets_rounded, color: AppColors.primary, size: 28)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
-            ],
+              ],
             );
           },
         ),
@@ -488,8 +520,9 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
     return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: isDark ? const Color(0xFF2C2416) : const Color(0xFFFFF9E6), borderRadius: BorderRadius.circular(28)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [Text(AppLang.tr(context, 'promoted') ?? 'Promoted', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFD35400))), const SizedBox(width: 12), Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: isDark ? const Color(0xFFFF9800) : const Color(0xFFF39C12), borderRadius: BorderRadius.circular(12)), child: Text(AppLang.tr(context, 'featured_listings') ?? 'Featured', style: TextStyle(color: isDark ? Colors.black87 : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))]), GestureDetector(onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'promoted') ?? 'Promoted'))); }, child: Container(padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8), color: Colors.transparent, child: Row(children: [Text(AppLang.tr(context, 'view_more') ?? 'More', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.secondary, fontSize: 13)), const SizedBox(width: 4), Icon(Icons.arrow_forward_ios, color: isDark ? Colors.white : AppColors.secondary, size: 12)])))]), const SizedBox(height: 4), Text(AppLang.tr(context, 'premium_listings') ?? 'Premium listings', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : AppColors.textSecondary, fontWeight: FontWeight.w500)), const SizedBox(height: 24), _buildCarList(cars, isLoading, true, controller: _promotedScrollController, isFetchingMore: isLoading), const SizedBox(height: 20),
       LuxuriousShowcase(
         showcaseKey: AppTourKeys.addAdKey,
-        title: 'ابدأ إعلانك',
-        description: 'اضغط هنا عشان تنشر إعلان سيارتك وتوصل لآلاف المشترين.',
+        // 🔥 تم التعديل هنا
+        title: AppLang.tr(context, 'tour_start_ad_title') ?? 'ابدأ إعلانك',
+        description: AppLang.tr(context, 'tour_start_ad_desc') ?? 'اضغط هنا عشان تنشر إعلان سيارتك وتوصل لآلاف المشترين.',
         child: Container(width: double.infinity, decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.premiumGoldStart, AppColors.premiumGoldEnd], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16)), child: ElevatedButton.icon(onPressed: () { if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'publish_ads_feature') ?? "نشر إعلانات"); return; } Navigator.push(context, MaterialPageRoute(builder: (context) => const StartSellingScreen(initialItemType: 'type_car'))); }, icon: const Icon(Icons.add_circle_outline, color: AppColors.secondary, size: 20), label: Text(AppLang.tr(context, 'start_ad_now') ?? 'Start Ad Now', style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold, fontSize: 15)), style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14)))),
       )
     ]));
@@ -510,7 +543,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
     if (cars.isEmpty) return SizedBox(height: 200, child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.directions_car_filled_outlined, size: 64, color: AppColors.textHint.withOpacity(0.3)), const SizedBox(height: 16), Text(AppLang.tr(context, 'no_cars_to_show') ?? "No cars to show", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textHint, fontSize: 16))])));
     return SizedBox(height: 395, child: ListView.builder(controller: controller, scrollDirection: Axis.horizontal, physics: const BouncingScrollPhysics(), clipBehavior: Clip.none, itemCount: cars.length + (isFetchingMore && controller != null ? 1 : 0), itemBuilder: (context, index) {
       if (index == cars.length) return const Padding(padding: EdgeInsets.symmetric(horizontal: 20.0), child: Center(child: CircularProgressIndicator(color: AppColors.primary)));
-      // 🔥 أول كارت في البروموتيد بس هياخد الـ keys عشان الجولة 🔥
       final bool isFirstPromotedCard = isPromotedSection && index == 0;
       return CarCard(
         car: cars[index],
@@ -521,7 +553,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
     }));
   }
 
-  // 🔥 Top Bar مع Showcase على البحث والفلتر 🔥
   Widget _buildTopBar(BuildContext context, bool isDark) {
     return Row(children: [
       Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight), borderRadius: BorderRadius.circular(14)), child: Image.asset('assets/images/logo.png', height: 26, width: 26)),
@@ -548,7 +579,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
     ]);
   }
 
-  // 🔥 Quick Actions مع Showcase على كل زرار 🔥
   Widget _buildQuickActions(BuildContext context, bool isDark) {
     return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
       _buildActionCard(

@@ -60,11 +60,11 @@ class _PartsScreenState extends State<PartsScreen> {
     });
   }
 
-  // 🔥 دالة سحرية بتدمج السيرش مع الفلتر وتبعتهم للسيرفر صح 🔥
   void _triggerSearchOrLoadMore({bool isLoadMore = false}) {
     final cubit = context.read<MarketCubit>();
     String finalQuery = "";
 
+    // 🔥 اللوجيك بيفضل عربي عشان الـ AI بيفهم الطلبات بالعربي أحسن في السيرفر 🔥
     if (_searchQuery.isNotEmpty && _selectedCompanies.isNotEmpty) {
       finalQuery = "${_searchQuery.trim()} متوافقة مع ${_selectedCompanies.join(' او ')}";
     } else if (_searchQuery.isNotEmpty) {
@@ -136,16 +136,16 @@ class _PartsScreenState extends State<PartsScreen> {
             children: [
               const Icon(Icons.lock_outline_rounded, size: 40, color: AppColors.primary),
               const SizedBox(height: 20),
-              const Text("تسجيل الدخول مطلوب", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+              Text(AppLang.tr(context, 'login_required') ?? "تسجيل الدخول مطلوب", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
               const SizedBox(height: 12),
-              Text("عفواً، لا يمكنك $featureName كزائر. قم بتسجيل الدخول!", textAlign: TextAlign.center),
+              Text("${AppLang.tr(context, 'guest_sorry_prefix') ?? 'عفواً، لا يمكنك'} $featureName ${AppLang.tr(context, 'guest_sorry_suffix') ?? 'كزائر. قم بتسجيل الدخول!'}", textAlign: TextAlign.center),
               const SizedBox(height: 32),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(ctx);
                   Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
                 },
-                child: const Text("تسجيل الدخول"),
+                child: Text(AppLang.tr(context, 'login') ?? "تسجيل الدخول"),
               ),
             ],
           ),
@@ -169,7 +169,7 @@ class _PartsScreenState extends State<PartsScreen> {
       }
 
       if (isFirstBatch && normals.isNotEmpty) {
-        feedWidgets.add(Text("المضاف حديثاً", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)));
+        feedWidgets.add(Text(AppLang.tr(context, 'recently_added') ?? "المضاف حديثاً", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)));
         feedWidgets.add(const SizedBox(height: 16));
         isFirstBatch = false;
       }
@@ -206,12 +206,9 @@ class _PartsScreenState extends State<PartsScreen> {
             List<CarModel> displayParts = [];
             bool isFilteringOrSearching = _searchQuery.isNotEmpty || _selectedCompanies.isNotEmpty;
 
-            // 🔥 اللوجيك النظيف لعرض النتائج 🔥
             if (isFilteringOrSearching) {
-              // بناخد النتايج اللي السيرفر جابها بناءً على الفلتر/السيرش
               displayParts.addAll(cubit.searchResults.where((e) => e.itemType == 'type_spare_part').toList());
 
-              // فلترة إضافية محلية للتأكيد
               if (_selectedCompanies.isNotEmpty) {
                 displayParts = displayParts.where((part) {
                   return _selectedCompanies.any((company) =>
@@ -223,6 +220,7 @@ class _PartsScreenState extends State<PartsScreen> {
               displayParts.addAll(normalParts);
             }
 
+            // 🔥 اللوجيك بيفضل بالكلمات الأصلية للبرمجة بس العرض مترجم 🔥
             if (_selectedPriceSort == 'الأقل سعراً') {
               displayParts.sort((a, b) => (a.price ?? 0).compareTo(b.price ?? 0));
             } else if (_selectedPriceSort == 'الأعلى سعراً') {
@@ -241,8 +239,8 @@ class _PartsScreenState extends State<PartsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("قطع الغيار", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                      Text("${cubit.sparePartsList.length} قطعة متوفرة", style: const TextStyle(fontSize: 14, color: AppColors.textHint)),
+                      Text(AppLang.tr(context, 'spare_parts') ?? "قطع الغيار", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                      Text("${cubit.sparePartsList.length} ${AppLang.tr(context, 'parts_available') ?? 'قطعة متوفرة'}", style: const TextStyle(fontSize: 14, color: AppColors.textHint)),
                     ],
                   ),
                 ),
@@ -268,7 +266,7 @@ class _PartsScreenState extends State<PartsScreen> {
                         setState(() => _isSearchFocused = false);
                       },
                       decoration: InputDecoration(
-                        hintText: "ابحث عن قطع الغيار...",
+                        hintText: AppLang.tr(context, 'search for parts...') ?? "ابحث عن قطع الغيار...",
                         prefixIcon: const Icon(Icons.search, color: AppColors.textHint),
                         suffixIcon: _searchQuery.isNotEmpty || _isSearchFocused ? IconButton(
                           icon: const Icon(Icons.close, color: AppColors.textHint, size: 20),
@@ -291,7 +289,7 @@ class _PartsScreenState extends State<PartsScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: Row(
                       children: [
-                        Expanded(flex: 3, child: GestureDetector(onTap: () => _showPremiumCompanyFilter(context, isDark), child: _buildFilterButton(title: _selectedCompanies.isEmpty ? "الشركة" : "الشركات (${_selectedCompanies.length})", isActive: _selectedCompanies.isNotEmpty, isDark: isDark))),
+                        Expanded(flex: 3, child: GestureDetector(onTap: () => _showPremiumCompanyFilter(context, isDark), child: _buildFilterButton(title: _selectedCompanies.isEmpty ? (AppLang.tr(context, 'company') ?? "الشركة") : "${AppLang.tr(context, 'companies') ?? 'الشركات'} (${_selectedCompanies.length})", isActive: _selectedCompanies.isNotEmpty, isDark: isDark))),
                         const SizedBox(width: 8),
                         Expanded(flex: 3, child: _buildPriceDropdownMenu(isDark: isDark)),
                         const SizedBox(width: 8),
@@ -299,7 +297,7 @@ class _PartsScreenState extends State<PartsScreen> {
                           flex: 3,
                           child: GestureDetector(
                             onTap: () {
-                              if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, "عرض المحفوظات"); return; }
+                              if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'view_saved_parts') ?? "عرض المحفوظات"); return; }
                               Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPartsScreen()));
                             },
                             child: Container(
@@ -308,7 +306,7 @@ class _PartsScreenState extends State<PartsScreen> {
                               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                                 const Icon(Icons.build_outlined, color: AppColors.primary, size: 18),
                                 const SizedBox(width: 4),
-                                Flexible(child: Text("المحفوظة", style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                                Flexible(child: Text(AppLang.tr(context, 'saved') ?? "المحفوظة", style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis)),
                               ]),
                             ),
                           ),
@@ -347,13 +345,13 @@ class _PartsScreenState extends State<PartsScreen> {
                       children: [
                         SizedBox(
                           height: MediaQuery.of(context).size.height * 0.5,
-                          child: const Center(
+                          child: Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.build_circle_outlined, size: 80, color: Colors.grey),
-                                SizedBox(height: 20),
-                                Text("لا توجد نتائج، قم بتغيير الفلتر أو ابحث مرة أخرى", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 16)),
+                                const Icon(Icons.build_circle_outlined, size: 80, color: Colors.grey),
+                                const SizedBox(height: 20),
+                                Text(AppLang.tr(context, 'no_results_change_filter') ?? "لا توجد نتائج، قم بتغيير الفلتر أو ابحث مرة أخرى", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 16)),
                               ],
                             ),
                           ),
@@ -368,7 +366,7 @@ class _PartsScreenState extends State<PartsScreen> {
                         if (!isFilteringOrSearching && _selectedPriceSort == 'الافتراضي')
                           ..._buildInterleavedFeed(context, isDark, promotedParts, displayParts)
                         else ...[
-                          Text("نتائج البحث والفلتر", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
+                          Text(AppLang.tr(context, 'search_and_filter_results') ?? "نتائج البحث والفلتر", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
                           const SizedBox(height: 16),
                           ...displayParts.map((part) => Column(children: [PartCard(partItem: part), const SizedBox(height: 12)])).toList(),
                         ],
@@ -382,7 +380,7 @@ class _PartsScreenState extends State<PartsScreen> {
                             child: OutlinedButton.icon(
                               onPressed: () => _triggerSearchOrLoadMore(isLoadMore: true),
                               icon: const Icon(Icons.refresh, color: AppColors.primary),
-                              label: const Text("تحميل المزيد من النتائج", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                              label: Text(AppLang.tr(context, 'load_more_results') ?? "تحميل المزيد من النتائج", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                               style: OutlinedButton.styleFrom(
                                   side: const BorderSide(color: AppColors.primary),
                                   padding: const EdgeInsets.symmetric(vertical: 12),
@@ -403,7 +401,6 @@ class _PartsScreenState extends State<PartsScreen> {
     );
   }
 
-  // 🔥 الفلتر اللي بيكلم السيرفر بمجرد ما تدوس تطبيق 🔥
   void _showPremiumCompanyFilter(BuildContext context, bool isDark) {
     showModalBottomSheet(
       context: context,
@@ -422,7 +419,7 @@ class _PartsScreenState extends State<PartsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text("الشركات", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+                        Text(AppLang.tr(context, 'companies') ?? "الشركات", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
                         Row(
                           children: [
                             GestureDetector(
@@ -431,7 +428,7 @@ class _PartsScreenState extends State<PartsScreen> {
                                 setState(() { _selectedCompanies.clear(); });
                                 _triggerSearchOrLoadMore();
                               },
-                              child: const Text("مسح الكل", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+                              child: Text(AppLang.tr(context, 'clear_all') ?? "مسح الكل", style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13)),
                             ),
                             const SizedBox(width: 16),
                             GestureDetector(onTap: () => Navigator.pop(context), child: Icon(Icons.close, size: 20, color: isDark ? Colors.white70 : Colors.black54))
@@ -473,9 +470,9 @@ class _PartsScreenState extends State<PartsScreen> {
                         style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                         onPressed: () {
                           Navigator.pop(context);
-                          _triggerSearchOrLoadMore(); // السحر هنا!
+                          _triggerSearchOrLoadMore();
                         },
-                        child: const Text("تطبيق الفلتر", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                        child: Text(AppLang.tr(context, 'apply_filter') ?? "تطبيق الفلتر", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     )
                   ],
@@ -507,13 +504,41 @@ class _PartsScreenState extends State<PartsScreen> {
   }
 
   Widget _buildPriceDropdownMenu({required bool isDark}) {
-    final items = ['الافتراضي', 'الأقل سعراً', 'الأعلى سعراً'];
+    final items = [
+      AppLang.tr(context, 'default_sort') ?? 'الافتراضي',
+      AppLang.tr(context, 'lowest_price') ?? 'الأقل سعراً',
+      AppLang.tr(context, 'highest_price') ?? 'الأعلى سعراً'
+    ];
+
+    // 🔥 نحافظ على مفاتيح البرمجة للتحكم في اللوجيك 🔥
+    final logicItems = ['الافتراضي', 'الأقل سعراً', 'الأعلى سعراً'];
+
     bool isActive = _selectedPriceSort != 'الافتراضي';
+
     return PopupMenuButton<String>(
       onSelected: (val) => setState(() => _selectedPriceSort = val),
       color: isDark ? const Color(0xFF161E27) : Colors.white,
-      itemBuilder: (context) => items.map((item) => PopupMenuItem(value: item, child: Text(item, style: TextStyle(color: item == _selectedPriceSort ? AppColors.primary : (isDark ? Colors.white : Colors.black87), fontWeight: item == _selectedPriceSort ? FontWeight.bold : FontWeight.normal)))).toList(),
-      child: _buildFilterButton(title: isActive ? _selectedPriceSort : "السعر", isActive: isActive, isDark: isDark),
+      itemBuilder: (context) {
+        return List.generate(items.length, (index) {
+          return PopupMenuItem(
+              value: logicItems[index],
+              child: Text(
+                  items[index],
+                  style: TextStyle(
+                      color: logicItems[index] == _selectedPriceSort ? AppColors.primary : (isDark ? Colors.white : Colors.black87),
+                      fontWeight: logicItems[index] == _selectedPriceSort ? FontWeight.bold : FontWeight.normal
+                  )
+              )
+          );
+        });
+      },
+      child: _buildFilterButton(
+          title: isActive
+              ? (items[logicItems.indexOf(_selectedPriceSort)])
+              : (AppLang.tr(context, 'price') ?? "السعر"),
+          isActive: isActive,
+          isDark: isDark
+      ),
     );
   }
 
@@ -529,12 +554,12 @@ class _PartsScreenState extends State<PartsScreen> {
             children: [
               Row(
                 children: [
-                  Text("ممولة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFD35400))),
+                  Text(AppLang.tr(context, 'promoted') ?? "ممولة", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFD35400))),
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(color: isDark ? const Color(0xFFFF9800) : const Color(0xFFF39C12), borderRadius: BorderRadius.circular(8)),
-                    child: Text("Featured Listings", style: TextStyle(color: isDark ? Colors.black87 : Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: const Text("Featured Listings", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -546,9 +571,9 @@ class _PartsScreenState extends State<PartsScreen> {
             children: [
               Expanded(
                 child: TextButton.icon(
-                  onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (context) => const ViewAllCarsScreen(title: "قطع غيار ممولة"))); },
+                  onPressed: () { Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'promoted_parts') ?? "قطع غيار ممولة"))); },
                   icon: Icon(Icons.keyboard_arrow_down, color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFD35400)),
-                  label: Text("عرض المزيد", style: TextStyle(color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFD35400), fontWeight: FontWeight.bold)),
+                  label: Text(AppLang.tr(context, 'view_more') ?? "عرض المزيد", style: TextStyle(color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFD35400), fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -563,11 +588,11 @@ class _PartsScreenState extends State<PartsScreen> {
             ),
             child: ElevatedButton.icon(
               onPressed: () {
-                if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, "نشر إعلانات"); return; }
+                if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'publish_ads_feature') ?? "نشر إعلانات"); return; }
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const StartSellingScreen(initialItemType: 'type_part')));
               },
               icon: const Icon(Icons.add_circle_outline, color: AppColors.secondary, size: 20),
-              label: const Text("ابدأ البيع الآن", style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold, fontSize: 15)),
+              label: Text(AppLang.tr(context, 'start_selling_now') ?? "ابدأ البيع الآن", style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold, fontSize: 15)),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
             ),
           ),
