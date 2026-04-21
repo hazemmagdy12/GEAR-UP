@@ -10,6 +10,7 @@ import '../../home/widgets/ai_chat_bottom_sheet.dart';
 import '../../marketplace/cubit/market_cubit.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
+
 class EditMyCarScreen extends StatefulWidget {
   final Map<String, dynamic>? carData;
   const EditMyCarScreen({super.key, this.carData});
@@ -68,6 +69,64 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
     }
   }
 
+  // 🔥 دالة رسالة التأكيد والحذف 🔥
+  void _confirmDelete() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF161E27) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+            const SizedBox(width: 8),
+            Text(AppLang.tr(context, 'delete_vehicle') ?? "حذف السيارة", style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Text(
+          AppLang.tr(context, 'confirm_delete_msg') ?? "هل أنت متأكد أنك تريد حذف هذه السيارة نهائياً؟ لا يمكن التراجع عن هذا الإجراء.",
+          style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 15, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(AppLang.tr(context, 'cancel') ?? "إلغاء", style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx); // قفل رسالة التأكيد
+              setState(() => _isUploading = true); // تشغيل اللودينج
+
+              try {
+                // استدعاء دالة الحذف من الكيوبيت
+                final String vehicleId = widget.carData!['id'];
+                await context.read<MarketCubit>().deleteMyVehicle(vehicleId);
+
+                if (mounted) {
+                  setState(() => _isUploading = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(AppLang.tr(context, 'deleted_successfully') ?? "تم حذف السيارة بنجاح"), backgroundColor: Colors.redAccent),
+                  );
+                  Navigator.pop(context); // الرجوع للشاشة السابقة بعد الحذف
+                }
+              } catch (e) {
+                setState(() => _isUploading = false);
+                debugPrint("Delete Error: $e");
+              }
+            },
+            child: Text(AppLang.tr(context, 'delete') ?? "حذف", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -87,6 +146,14 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
             style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.w900)
         ),
         centerTitle: true,
+        // 🔥 إضافة زرار الحذف هنا (مش هيظهر غير لو فيه داتا للعربية) 🔥
+        actions: [
+          if (widget.carData != null && widget.carData!['id'] != null)
+            IconButton(
+              icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 26),
+              onPressed: _isUploading ? null : _confirmDelete,
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -98,7 +165,6 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
             Text(AppLang.tr(context, 'update_car_info') ?? "تحديث معلومات سيارتك", style: TextStyle(color: isDark ? Colors.white70 : AppColors.textSecondary, fontSize: 14)),
             const SizedBox(height: 32),
 
-            // 🔥 قسم عرض واختيار الصور متصلح 🔥
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -111,7 +177,6 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                     clipBehavior: Clip.none,
                     physics: const BouncingScrollPhysics(),
                     children: [
-                      // زرار إضافة الصور
                       GestureDetector(
                         onTap: _pickImages,
                         child: Container(
@@ -134,7 +199,6 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                         ),
                       ),
 
-                      // 🔥 عرض الصور الجديدة 🔥
                       ..._newSelectedImages.asMap().entries.map((entry) {
                         int index = entry.key;
                         File file = entry.value;
@@ -164,7 +228,6 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                         );
                       }),
 
-                      // 🔥 عرض الصور القديمة من الفايربيز 🔥
                       ..._existingImagesUrls.asMap().entries.map((entry) {
                         int index = entry.key;
                         String url = entry.value;
@@ -254,7 +317,6 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                             File img = _newSelectedImages[i];
                             String targetPath = '${tempDir.path}/comp_mycar_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
 
-                            // ضغط الصورة قبل الرفع
                             XFile? compressedFile = await FlutterImageCompress.compressAndGetFile(
                               img.absolute.path,
                               targetPath,
@@ -266,7 +328,6 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
 
                             File fileToUpload = compressedFile != null ? File(compressedFile.path) : img;
 
-                            // رفع الصورة المضغوطة
                             CloudinaryResponse response = await cubit.cloudinary.uploadFile(
                                 CloudinaryFile.fromFile(fileToUpload.path, folder: 'items_images')
                             );
@@ -325,7 +386,6 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
     );
   }
 
-  // 🔥 التعديل السحري هنا: الـ TextField بقى قطعة واحدة وPremium جداً 🔥
   Widget _buildLabelField(String label, IconData icon, TextEditingController controller, bool isDark, String hint, {bool isNumber = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

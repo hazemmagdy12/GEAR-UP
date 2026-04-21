@@ -1917,4 +1917,21 @@ class MarketCubit extends Cubit<MarketState> {
       emit(MarketInitial());
     }
   }
+  // دالة حذف السيارة
+  Future<void> deleteMyVehicle(String vehicleId) async {
+    try {
+      // 1. الحذف من الفايربيز
+      await _firestore.collection('cars').doc(vehicleId).delete();
+
+      // 2. الحذف من اللستات المحلية عشان الشاشة تتحدث فوراً
+      carsList.removeWhere((car) => car.id == vehicleId);
+      newCarsList.removeWhere((car) => car.id == vehicleId);
+      usedCarsList.removeWhere((car) => car.id == vehicleId);
+
+      // 3. تحديث الشاشة
+      emit(MarketInitial());
+    } catch (e) {
+      debugPrint("Error deleting vehicle: $e");
+    }
+  }
 }
