@@ -17,7 +17,7 @@ import 'account_information_screen.dart';
 import 'payments_screen.dart';
 import 'my_reviews_screen.dart';
 import 'admin_dashboard_screen.dart'; // 🔥 استدعاء لوحة الأدمن 🔥
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -28,10 +28,13 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
+  @override
+  @override
   void initState() {
     super.initState();
     final authCubit = context.read<AuthCubit>();
-    if (CacheHelper.getData(key: 'uid') != null && authCubit.currentUser == null) {
+    // رجعناها طبيعية بتجيب البيانات بس من غير ما تعدل حاجة في القاعدة
+    if (CacheHelper.getData(key: 'uid') != null) {
       authCubit.getUserData();
     }
   }
@@ -157,6 +160,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             if (email.isNotEmpty) Text(email, style: const TextStyle(color: Colors.white70, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
                             const SizedBox(height: 4),
                             if (phone.isNotEmpty) Text(phone, style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 8),
+                            // 🔥 الكود ده هيطبعلك الـ ID بتاعك عشان تعرف إنت مين في الفايربيز 🔥
+
                           ],
                         ),
                       ),

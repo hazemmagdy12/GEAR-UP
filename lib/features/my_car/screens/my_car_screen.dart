@@ -203,12 +203,15 @@ class _MyCarScreenState extends State<MyCarScreen> {
                 isDark: isDark,
                 actionLabel: AppLang.tr(context, 'add_your_cars') ?? 'إضافة',
                 actionIcon: Icons.add_circle_outline,
-                onActionTap: () {
+                onActionTap: () async {
                   if (!isLoggedIn) {
                     _showGuestDialog(context, AppLang.tr(context, 'add_car_to_garage') ?? "إضافة سيارة للجراج");
                     return;
                   }
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const EditMyCarScreen(carData: null)));
+                  await Navigator.push(context, MaterialPageRoute(builder: (context) => const EditMyCarScreen(carData: null)));
+                  if (context.mounted) {
+                    context.read<MarketCubit>().getMyCarData(); // 🔥 تحديث الداتا بعد ما نرجع
+                  }
                 },
               ),
             ),
@@ -234,7 +237,22 @@ class _MyCarScreenState extends State<MyCarScreen> {
                     String model = car['model'] ?? "Not Set";
                     String year = car['year'] ?? "N/A";
                     String mileage = car['mileage'] ?? "0";
-                    if (mileage != "0" && !mileage.contains("km")) mileage += " km";
+// 🔥 السحر هنا: كود بيقسم الكيلومترات ويحط فواصل الآلاف 🔥
+                    if (mileage != "0" && mileage.isNotEmpty) {
+                      // 1. نشيل أي حروف لو موجودة عشان نفلتر الرقم بس
+                      String cleanMileage = mileage.replaceAll(RegExp(r'[^0-9]'), '');
+
+                      if (cleanMileage.isNotEmpty) {
+                        // 2. نحط الفاصلة كل 3 أرقام
+                        String formattedMileage = cleanMileage.replaceAllMapped(
+                            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                                (Match m) => '${m[1]},'
+                        );
+
+                        // 3. نرجع كلمة km تاني
+                        mileage = "$formattedMileage km";
+                      }
+                    }
                     List<dynamic> images = car['images'] ?? (car['imageUrl'] != null ? [car['imageUrl']] : []);
 
                     // 🔥 تحسين الأداء: الفلترة بتتعمل هنا مرة واحدة بسرعة 🔥
@@ -474,9 +492,14 @@ class _MyCarScreenState extends State<MyCarScreen> {
     String coverImage = images.isNotEmpty ? images.first.toString() : "";
 
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => EditMyCarScreen(
-          carData: {'id': carId, 'make': make, 'model': model, 'year': year, 'mileage': mileage, 'images': images}
-      ))),
+      onTap: () async {
+        await Navigator.push(context, MaterialPageRoute(builder: (context) => EditMyCarScreen(
+            carData: {'id': carId, 'make': make, 'model': model, 'year': year, 'mileage': mileage, 'images': images}
+        )));
+        if (context.mounted) {
+          context.read<MarketCubit>().getMyCarData(); // 🔥 تحديث الداتا بعد التعديل
+        }
+      },
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),

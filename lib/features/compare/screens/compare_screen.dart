@@ -217,8 +217,19 @@ class CompareScreen extends StatelessWidget {
           _buildSpecRowCard(context, AppLang.tr(context, 'cc') ?? "سعة المحرك", cars.map((c) => c.cc.isNotEmpty ? c.cc : "N/A").toList(), 'cc', isDark, carCount),
           _buildSpecRowCard(context, AppLang.tr(context, 'hp') ?? "قوة الحصان", cars.map((c) => c.hp.isNotEmpty ? c.hp : "N/A").toList(), 'hp', isDark, carCount),
           _buildSpecRowCard(context, AppLang.tr(context, 'torque') ?? "عزم الدوران", cars.map((c) => c.torque.isNotEmpty ? c.torque : "N/A").toList(), 'torque', isDark, carCount),
-          _buildSpecRowCard(context, AppLang.tr(context, 'mileage') ?? "المسافة", cars.map((c) => c.mileage.isNotEmpty ? "${c.mileage} ${AppLang.tr(context, 'km') ?? 'km'}" : "0 ${AppLang.tr(context, 'km') ?? 'km'}").toList(), 'mileage', isDark, carCount),
-          _buildSpecRowCard(context, AppLang.tr(context, 'luggage_capacity') ?? "الشنطة", cars.map((c) => c.luggageCapacity.isNotEmpty ? c.luggageCapacity : "N/A").toList(), 'luggage', isDark, carCount),
+          _buildSpecRowCard(
+              context,
+              AppLang.tr(context, 'mileage') ?? "المسافة",
+              cars.map((c) {
+                String cleanNum = c.mileage.replaceAll(RegExp(r'[^0-9]'), '');
+                if (cleanNum.isEmpty) return "0 ${AppLang.tr(context, 'km') ?? 'km'}";
+                String formatted = cleanNum.replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+                return "$formatted ${AppLang.tr(context, 'km') ?? 'km'}";
+              }).toList(),
+              'mileage',
+              isDark,
+              carCount
+          ),          _buildSpecRowCard(context, AppLang.tr(context, 'luggage_capacity') ?? "الشنطة", cars.map((c) => c.luggageCapacity.isNotEmpty ? c.luggageCapacity : "N/A").toList(), 'luggage', isDark, carCount),
           _buildSpecRowCard(context, AppLang.tr(context, 'transmission') ?? "ناقل الحركة", cars.map((c) => c.transmission.isNotEmpty ? (AppLang.tr(context, c.transmission.toLowerCase()) ?? c.transmission) : "N/A").toList(), 'text', isDark, carCount),
           _buildSpecRowCard(context, AppLang.tr(context, 'condition') ?? "الحالة", cars.map((c) => AppLang.tr(context, c.condition.toLowerCase()) ?? c.condition).toList(), 'text', isDark, carCount),
         ],

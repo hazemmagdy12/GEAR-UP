@@ -63,9 +63,8 @@ class AuthCubit extends Cubit<AuthState> {
       String uid = userCredential.user!.uid;
 
       UserModel userModel = UserModel(
-        uId: uid, name: name, email: email, phone: phone, profileImage: '', location: '', createdAt: DateTime.now().toIso8601String(),
+        uId: uid, name: name, email: email, phone: phone, profileImage: '', location: '', createdAt: DateTime.now().toIso8601String(), role: 'user',
       );
-
       await _firestore.collection('users').doc(uid).set(userModel.toMap());
 
       await CacheHelper.saveData(key: 'is_new_user_$uid', value: true);
@@ -147,8 +146,8 @@ class AuthCubit extends Cubit<AuthState> {
           profileImage: userCredential.user!.photoURL ?? '',
           location: '',
           createdAt: DateTime.now().toIso8601String(),
+          role: 'user', // 🔥 ضفنا الرول هنا
         );
-
         await _firestore.collection('users').doc(uid).set(userModel.toMap());
 
         await CacheHelper.saveData(key: 'is_new_user_$uid', value: true);
@@ -209,6 +208,7 @@ class AuthCubit extends Cubit<AuthState> {
             profileImage: userCredential.user!.photoURL ?? '',
             location: '',
             createdAt: DateTime.now().toIso8601String(),
+            role: 'user', // 🔥 ضفنا الرول هنا
           );
 
           await _firestore.collection('users').doc(uid).set(userModel.toMap());
@@ -276,8 +276,16 @@ class AuthCubit extends Cubit<AuthState> {
         Placemark place = placemarks[0]; String currentLoc = "${place.administrativeArea ?? place.locality}, ${place.country}";
         if (currentUser != null && currentUser!.location != currentLoc) {
           String uid = currentUser!.uId; await _firestore.collection('users').doc(uid).set({'location': currentLoc,}, SetOptions(merge: true));
-          currentUser = UserModel(uId: currentUser!.uId, name: currentUser!.name, email: currentUser!.email, phone: currentUser!.phone, location: currentLoc, createdAt: currentUser!.createdAt, profileImage: currentUser!.profileImage,);
-          emit(LocationFetchedSuccess(currentLoc));
+          currentUser = UserModel(
+            uId: currentUser!.uId,
+            name: currentUser!.name,
+            email: currentUser!.email,
+            phone: currentUser!.phone,
+            location: currentLoc,
+            createdAt: currentUser!.createdAt,
+            profileImage: currentUser!.profileImage,
+            role: currentUser!.role, // 🔥 الجندي المجهول اللي كان بيسحب منك الرتبة
+          );          emit(LocationFetchedSuccess(currentLoc));
         }
       }
     } catch (e) { print("Location Silent Error: $e"); }
@@ -291,8 +299,18 @@ class AuthCubit extends Cubit<AuthState> {
       if (uid != null) {
         if (profileImage != null) { currentImageUrl = await _uploadToCloudinary(profileImage!); }
         await _firestore.collection('users').doc(uid).set({'name': name, 'phone': phone, 'email': email, 'profileImage': currentImageUrl,}, SetOptions(merge: true));
-        if (currentUser != null) { currentUser = UserModel(uId: currentUser!.uId, name: name, email: email, phone: phone, location: currentUser!.location, createdAt: currentUser!.createdAt, profileImage: currentImageUrl,); }
-        clearProfileImage(); emit(UpdateUserSuccess());
+        if (currentUser != null) {
+          currentUser = UserModel(
+            uId: currentUser!.uId,
+            name: name,
+            email: email,
+            phone: phone,
+            location: currentUser!.location,
+            createdAt: currentUser!.createdAt,
+            profileImage: currentImageUrl,
+            role: currentUser!.role, // 🔥 حماية الرتبة من الضياع
+          );
+        }        clearProfileImage(); emit(UpdateUserSuccess());
       }
     } catch (e) { emit(UpdateUserError('update_user_error')); } // 🔥 Key
   }

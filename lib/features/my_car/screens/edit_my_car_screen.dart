@@ -234,8 +234,13 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isUploading ? null : () async {
-                      if (_brandController.text.trim().isEmpty || _modelController.text.trim().isEmpty) return;
-
+                      if (_brandController.text.trim().isEmpty || _modelController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(AppLang.tr(context, 'fill_required_fields') ?? "يرجى كتابة الماركة والموديل على الأقل"),
+                            backgroundColor: Colors.redAccent
+                        ));
+                        return;
+                      }
                       setState(() => _isUploading = true);
 
                       List<String> finalImagesUrls = List.from(_existingImagesUrls);

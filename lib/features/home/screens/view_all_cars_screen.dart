@@ -500,8 +500,9 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
   }
 
   Widget _buildLargeCarCard({required BuildContext context, required bool isDark, required CarModel car, double? rating, bool isPromoted = false, bool isTopRatedSection = false}) {
-    final price = "${AppLang.tr(context, 'currency_egp') ?? 'EGP'} ${car.price.toStringAsFixed(0)}";
-    final imageUrl = car.images.isNotEmpty ? car.images.first : null;
+    String rawPrice = car.price.toStringAsFixed(0);
+    String formattedPrice = rawPrice.replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    final price = "${AppLang.tr(context, 'currency_egp') ?? 'EGP'} $formattedPrice";    final imageUrl = car.images.isNotEmpty ? car.images.first : null;
     const fallbackImage = 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?q=80&w=800&auto=format&fit=crop';
     final cubit = context.read<MarketCubit>();
 
