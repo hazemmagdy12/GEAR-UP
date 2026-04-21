@@ -81,3 +81,5 @@ class CompareCarsUpdated extends MarketState {}
 // ==========================================
 class MyReviewsLoadingState extends MarketState {}
 class MyReviewsLoadedState extends MarketState {}
+class MarketLoading extends MarketState {}
+class MarketLoaded extends MarketState {}

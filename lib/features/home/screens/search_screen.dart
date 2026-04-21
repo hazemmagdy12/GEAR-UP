@@ -32,9 +32,9 @@ class _SearchScreenState extends State<SearchScreen> {
     _loadRecentSearches();
 
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 100) {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 600) {
         final cubit = context.read<MarketCubit>();
-        if (!cubit.isSearchingMore && cubit.searchResults.isNotEmpty) {
+        if (!cubit.isSearchingMore && !cubit.hasReachedMaxSearch) {
           cubit.searchSpecificCar(_searchController.text, isLoadMore: true);
         }
       }
@@ -216,8 +216,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   if (cubit.searchResults.isNotEmpty) {
                     return ListView.separated(
                       controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-                      itemCount: cubit.searchResults.length + (state is SearchCarsLoadingMore ? 1 : 0),
+                      itemCount: cubit.searchResults.length + (cubit.isSearchingMore ? 1 : 0),
                       separatorBuilder: (context, index) => const SizedBox(height: 20),
                       itemBuilder: (context, index) {
                         if (index == cubit.searchResults.length) {

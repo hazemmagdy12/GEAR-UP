@@ -53,7 +53,7 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
     });
 
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 800) {
         if (_searchQuery.isNotEmpty) {
           _triggerSearchOrLoadMore(isLoadMore: true);
         } else {

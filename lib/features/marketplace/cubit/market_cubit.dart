@@ -22,8 +22,13 @@ class MarketCubit extends Cubit<MarketState> {
   MarketCubit() : super(MarketInitial()) {
     Future.microtask(() => loadCompareCarsFromCache());
   }
-
-  bool hasReachedMaxSearch = false;
+  String? lastGeneratedType; // متغير بيفتكر آخر سكشن اتعرض
+// خريطة بتحفظ إحنا وقفنا فين في كل سكشن لوحده
+  Map<String, DocumentSnapshot?> lastDocs = {
+    'new_cars': null,
+    'used_cars': null,
+    'promoted': null,
+  };  bool hasReachedMaxSearch = false;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final cloudinary = CloudinaryPublic('dfawviyf3', 'zclpevpk', cache: false);
   final Dio _dio = Dio();
@@ -169,9 +174,7 @@ class MarketCubit extends Cubit<MarketState> {
         isSearchingMore = true;
       }
 
-      // =========================================================
-      // 1. البحث المحلي (Local Search)
-      // =========================================================
+      // 1. البحث المحلي
       String lowerQuery = query.toLowerCase().trim();
       Set<String> addedIds = {};
 
@@ -203,9 +206,7 @@ class MarketCubit extends Cubit<MarketState> {
 
     List<CarModel> targetList = isPart ? partsSearchResults : searchResults;
 
-    // =========================================================
-    // 2. البحث في الفايربيز (Firebase Fallback)
-    // =========================================================
+    // 2. البحث في الفايربيز
     if (targetList.length < 4 && possibleMake.isNotEmpty) {
       try {
         String collection = isPart ? 'spare_parts' : 'cars';
@@ -219,7 +220,6 @@ class MarketCubit extends Cubit<MarketState> {
           CarModel car = CarModel.fromJson(doc.data() as Map<String, dynamic>);
           if (!targetList.any((c) => c.id == car.id)) {
             targetList.add(car);
-            // لو مش موجودة في اللوكال بنضيفها عشان منسحبهاش تاني
             if (!carsList.any((c) => c.id == car.id)) carsList.add(car);
           }
         }
@@ -228,15 +228,16 @@ class MarketCubit extends Cubit<MarketState> {
       }
     }
 
-    // =========================================================
-    // 3. البحث بالذكاء الاصطناعي (API Fallback)
-    // =========================================================
-    if (targetList.length < 4) {
+    // 3. البحث بالذكاء الاصطناعي وبناء الداتا بيز
+    if (isLoadMore || targetList.length < 4) {
       try {
+        String finalQuery = query.trim();
+        if (isLoadMore) finalQuery = "$finalQuery (مزيد من الخيارات المختلفة)";
+
         final response = await _dio.post(
           '$_baseUrl/api/search/smart',
           data: {
-            "query": query.trim(),
+            "query": finalQuery,
             "offset": isPart ? partSearchApiOffset : searchApiOffset,
             "limit": 10,
           },
@@ -251,9 +252,12 @@ class MarketCubit extends Cubit<MarketState> {
             String fetchedMake = item['make']?.toString().trim() ?? '';
             String fetchedModel = item['model']?.toString().trim() ?? '';
 
-            // =========================================================
-            // درع الحماية الصارم ضد الهلوسة (Strict Whitelist Shield)
-            // =========================================================
+            // 🔥 توليد ID فريد لو السيرفر مبعتش عشان اللستة تزيد
+            String fetchedId = item['id']?.toString() ?? '';
+            if (fetchedId.isEmpty || fetchedId == 'null' || fetchedId.length < 5) {
+              fetchedId = _firestore.collection('cars').doc().id;
+            }
+
             List<String> realBrands = [
               'bmw', 'mercedes', 'chevrolet', 'toyota', 'hyundai', 'kia',
               'nissan', 'mitsubishi', 'skoda', 'volkswagen', 'renault',
@@ -265,14 +269,12 @@ class MarketCubit extends Cubit<MarketState> {
             bool isValidBrand = realBrands.any((brand) => fetchedMake.toLowerCase().contains(brand)) ||
                 _carAliases.keys.any((alias) => fetchedMake.toLowerCase().contains(alias));
 
-            // لو الماركة مش حقيقية ومش بنبحث عن قطع غيار، نتجاهلها تماماً
             if (!isValidBrand && !isPart) {
               continue;
             }
-            // =========================================================
 
             fetchedItems.add(CarModel(
-                id: item['id']?.toString() ?? '',
+                id: fetchedId,
                 sellerId: item['sellerId']?.toString() ?? 'ai_server',
                 itemType: item['itemType']?.toString() ?? (isPart ? 'type_spare_part' : 'type_car'),
                 make: fetchedMake.isNotEmpty ? fetchedMake : (isPart ? item['title']?.toString() ?? 'قطعة' : 'Unknown'),
@@ -299,16 +301,15 @@ class MarketCubit extends Cubit<MarketState> {
             ));
           }
 
-          // معالجة الداتا النظيفة اللي عدت من الدرع
-          if (fetchedItems.isEmpty) {
+          if (resultsList.isEmpty) {
             if (isPart) hasReachedMaxPartSearch = true; else hasReachedMaxSearch = true;
           } else {
-            if (isPart) partSearchApiOffset += fetchedItems.length; else searchApiOffset += fetchedItems.length;
+            if (isPart) partSearchApiOffset += resultsList.length; else searchApiOffset += resultsList.length;
 
             for (var item in fetchedItems) {
               if (!targetList.any((existing) => existing.id == item.id)) {
                 targetList.add(item);
-                // حفظ في الفايربيز عشان الكاشينج
+                // الحفظ في الفايربيز
                 String targetCollection = item.itemType == 'type_spare_part' ? 'spare_parts' : 'cars';
                 await _firestore.collection(targetCollection).doc(item.id).set(item.toMap(), SetOptions(merge: true));
               }
@@ -318,13 +319,11 @@ class MarketCubit extends Cubit<MarketState> {
       } catch (e) {
         debugPrint("API Search Error: $e");
       }
-    } else {
-      if (isPart) hasReachedMaxPartSearch = true; else hasReachedMaxSearch = true;
     }
 
     if (isPart) isSearchingMorePartsSearch = false; else isSearchingMore = false;
     emit(SearchCarsSuccess());
-  }
+  } //searchSpecificCar
   void clearSearch({bool isPart = false}) {
     if (isPart) {
       partsSearchResults.clear();
@@ -734,6 +733,9 @@ class MarketCubit extends Cubit<MarketState> {
 
     emit(GetCarsLoading());
     try {
+      // 1. ========================================================
+      // الكود الأصلي بتاعك (جلب الداتا والفلترة والمسح)
+      // ===========================================================
       final QuerySnapshot aiCarsSnapshot = await _firestore
           .collection('cars')
           .orderBy('createdAt', descending: true)
@@ -778,14 +780,63 @@ class MarketCubit extends Cubit<MarketState> {
         hasMoreCarsInFirebase = false;
       }
 
+      // 2. ========================================================
+      // 🔥 الحل الجذري: تأمين السكاشن الثابتة لو طلعت فاضية 🔥
+      // ===========================================================
+      if (newCarsList.isEmpty) {
+        debugPrint("⚠️ [DEBUG] لستة الجديد طلعت فاضية! بنجيب 5 مخصوص...");
+        try {
+          final newSnapshot = await _firestore.collection('cars')
+              .where('condition', isEqualTo: 'new_condition')
+              .limit(5).get();
+          for (var doc in newSnapshot.docs) {
+            CarModel car = CarModel.fromJson(doc.data() as Map<String, dynamic>);
+            if (!carsList.any((c) => c.id == car.id)) {
+              carsList.add(car);
+              newCarsList.add(car);
+            }
+          }
+        } catch (e) {
+          debugPrint("❌ [ERROR] إيرور في جلب الجديد: $e");
+        }
+      }
+
+      if (usedCarsList.isEmpty) {
+        debugPrint("⚠️ [DEBUG] لستة المستعمل طلعت فاضية! بنجيب 5 مخصوص...");
+        try {
+          final usedSnapshot = await _firestore.collection('cars')
+              .where('condition', isEqualTo: 'used_condition')
+              .limit(5).get();
+          for (var doc in usedSnapshot.docs) {
+            CarModel car = CarModel.fromJson(doc.data() as Map<String, dynamic>);
+            if (!carsList.any((c) => c.id == car.id)) {
+              carsList.add(car);
+              usedCarsList.add(car);
+            }
+          }
+        } catch (e) {
+          debugPrint("❌ [ERROR] إيرور في جلب المستعمل: $e");
+        }
+      }
+
+      // 3. ========================================================
+      // تكملة الكود الأصلي بتاعك
+      // ===========================================================
       await getSavedCars();
       await getSavedParts();
+
+      // 4. ========================================================
+      // 🔥 صدمة الشاشة (إجبار إعادة الرسم) 🔥
+      // ===========================================================
+      emit(GetCarsLoading());
+      await Future.delayed(const Duration(milliseconds: 100));
+
       emit(GetCarsSuccess());
+
     } catch (e) {
       emit(GetCarsError(e.toString()));
     }
   }
-
   Future<void> fetchExternalCarsData() async {
     if (isFetchingExternal) return;
     isFetchingExternal = true;
@@ -810,124 +861,184 @@ class MarketCubit extends Cubit<MarketState> {
       } else { throw Exception("السيرفر لم يرسل بيانات صحيحة"); }
     } catch (e) { isFetchingExternal = false; emit(FetchExternalCarsSuccess()); }
   }
-
   Future<void> generateNextDynamicSection() async {
     if (isGeneratingDynamicSection || isFilterActive) return;
-    isGeneratingDynamicSection = true; emit(MarketInitial());
+
+    isGeneratingDynamicSection = true;
+    emit(MarketInitial());
+
     try {
-      List<String> sequence = ['promoted', 'top_rated', 'new_cars', 'used_cars', 'news'];
-      bool hasSurvey = CacheHelper.getData(key: 'survey_completed') == true;
-      if (hasSurvey && !sequence.contains('personalized')) {
-        sequence.insert(0, 'personalized');
-      }
-      Future<List<CarModel>> _fetchPersonalizedCarsFromAI(String usage, String budget) async {
+      // =========================================================
+      // 1. الدالة المساعدة للذكاء الاصطناعي
+      // =========================================================
+      Future<List<CarModel>> fetchPersonalizedCarsFromAI(String usage, String budget) async {
         List<CarModel> generatedList = [];
-
-        // =================================================================
-        // 1. محاولة الكاشينج من الفايربيز أولاً
-        // =================================================================
         try {
-          final localSnapshot = await _firestore.collection('cars')
-              .where('sellerId', isEqualTo: 'ai_personalized')
-              .limit(15)
-              .get();
-
+          final localSnapshot = await _firestore.collection('cars').where('sellerId', isEqualTo: 'ai_personalized').limit(15).get();
           for (var doc in localSnapshot.docs) {
             CarModel car = CarModel.fromJson(doc.data() as Map<String, dynamic>);
-            if (!carsList.any((c) => c.id == car.id) && !shownDynamicCarIds.contains(car.id)) {
-              generatedList.add(car);
-            }
+            if (!carsList.any((c) => c.id == car.id) && !shownDynamicCarIds.contains(car.id)) generatedList.add(car);
           }
-
           if (generatedList.length >= 4) {
             generatedList = generatedList.take(4).toList();
             carsList.addAll(generatedList);
-            for (var car in generatedList) {
-              _loadedHomeModels.add("${car.make.toUpperCase()} ${car.model.toUpperCase()}");
-            }
-            return generatedList; // خروج وتوفير الـ API
+            for (var car in generatedList) _loadedHomeModels.add("${car.make.toUpperCase()} ${car.model.toUpperCase()}");
+            return generatedList;
           }
-        } catch (e) {
-          debugPrint("Cache fetch error: $e");
-        }
+        } catch (e) { debugPrint("Cache fetch error: $e"); }
 
-        // =================================================================
-        // 2. تفعيل الذكاء الاصطناعي لو الداتا مش موجودة أو مش مكفية
-        // =================================================================
-        generatedList.clear(); // تفريغ اللستة عشان نملاها بالجديد
+        generatedList.clear();
         String avoidModels = _loadedHomeModels.isEmpty ? "None" : _loadedHomeModels.take(20).join(", ");
-
         try {
-          final aiResponse = await _dio.post('$_baseUrl/api/ai/chat', data: {"messages": [{"role": "system", "content": "You are an expert in the Egyptian automotive market in $_currentYear. Generate a JSON array of 4 car objects available in Egypt. Format: [{\"make\":\"...\",\"model\":\"...\",\"year\":\"...\",\"price\":1000000,\"condition\":\"used_condition\",\"hp\":\"...\",\"cc\":\"...\",\"torque\":\"...\",\"mileage\":\"...\"}]"}, {"role": "user", "content": "Generate 4 realistic cars available in Egypt. The user wants a car for: '$usage'. Their budget range is: '$budget'. STRICTLY ensure the price matches this budget. DO NOT use these exact models: [$avoidModels]."}], "temperature": 0.8});
+          final aiResponse = await _dio.post('$_baseUrl/api/ai/chat', data: {"messages": [{"role": "system", "content": "You are an expert... Generate a JSON array of 4 car objects..."}, {"role": "user", "content": "Generate 4 realistic cars... usage: '$usage'. budget: '$budget'. DO NOT use models: [$avoidModels]."}], "temperature": 0.8});
           if (aiResponse.statusCode == 200) {
             String responseText = aiResponse.data['choices'][0]['message']['content'];
-            int startIndex = responseText.indexOf('[');
-            int endIndex = responseText.lastIndexOf(']');
+            int startIndex = responseText.indexOf('['); int endIndex = responseText.lastIndexOf(']');
             if (startIndex != -1 && endIndex != -1) {
               try {
                 List<dynamic> generatedCars = jsonDecode(responseText.substring(startIndex, endIndex + 1));
                 List<Future<void>> futures = generatedCars.map<Future<void>>((aiCar) async {
-                  String make = aiCar['make'].toString().toUpperCase();
-                  String model = aiCar['model'].toString().toUpperCase();
-                  String year = aiCar['year'].toString();
-                  String imageUrl = await _getSmartImage(make, model, year);
-                  String docId = _firestore.collection('cars').doc().id;
-
-                  CarModel fetchedCar = CarModel(id: docId, sellerId: 'ai_personalized', itemType: 'type_car', make: make, model: model, year: year, price: double.tryParse(aiCar['price'].toString()) ?? 1000000.0, condition: aiCar['condition'] ?? 'used_condition', description: '✨ سيارة تم اختيارها خصيصاً لك بناءً على تفضيلاتك.', images: [imageUrl], createdAt: DateTime.now().toIso8601String(), hp: aiCar['hp']?.toString() ?? 'N/A', cc: aiCar['cc']?.toString() ?? 'N/A', torque: aiCar['torque']?.toString() ?? 'N/A', transmission: 'Automatic', luggageCapacity: 'N/A', mileage: aiCar['mileage']?.toString() ?? '50000', sellerName: 'GEAR UP Assistant', sellerPhone: '16000', sellerLocation: 'مصر', sellerEmail: '', rating: 0.0, reviewsCount: 0);
-
+                  String make = aiCar['make'].toString().toUpperCase(); String model = aiCar['model'].toString().toUpperCase(); String year = aiCar['year'].toString();
+                  String imageUrl = await _getSmartImage(make, model, year); String docId = _firestore.collection('cars').doc().id;
+                  CarModel fetchedCar = CarModel(id: docId, sellerId: 'ai_personalized', itemType: 'type_car', make: make, model: model, year: year, price: double.tryParse(aiCar['price'].toString()) ?? 1000000.0, condition: aiCar['condition'] ?? 'used_condition', description: '✨ سيارة تم اختيارها خصيصاً لك.', images: [imageUrl], createdAt: DateTime.now().toIso8601String(), hp: aiCar['hp']?.toString() ?? 'N/A', cc: aiCar['cc']?.toString() ?? 'N/A', torque: aiCar['torque']?.toString() ?? 'N/A', transmission: 'Automatic', luggageCapacity: 'N/A', mileage: aiCar['mileage']?.toString() ?? '50000', sellerName: 'GEAR UP Assistant', sellerPhone: '16000', sellerLocation: 'مصر', sellerEmail: '', rating: 0.0, reviewsCount: 0);
                   await _firestore.collection('cars').doc(docId).set(fetchedCar.toMap());
-                  carsList.add(fetchedCar);
-                  generatedList.add(fetchedCar);
-                  _loadedHomeModels.add("$make $model");
+                  carsList.add(fetchedCar); generatedList.add(fetchedCar); _loadedHomeModels.add("$make $model");
                 }).toList();
                 await Future.wait(futures);
-              } catch (jsonErr) {
-                debugPrint("AI Personalized JSON Error: $jsonErr");
-              }
+              } catch (jsonErr) { debugPrint("AI JSON Error: $jsonErr"); }
             }
           }
         } catch (e) {}
         return generatedList;
       }
 
-      String selectedType = sequence[_dynamicSequenceIndex % sequence.length];
-      _dynamicSequenceIndex++;
+      // =========================================================
+      // 🔥 2. حلقة الاختيار ومنع الفراغ 🔥
+      // =========================================================
+      List<dynamic> finalSourceList = [];
+      String finalTitleKey = '';
+      String finalSubtitleKey = '';
+      bool finalIsPremium = false;
+      String finalSelectedType = '';
 
-      List<dynamic> sourceList = []; String titleKey = ''; String subtitleKey = ''; bool isPremium = false;
+      int sectionRetry = 0;
+      bool sectionFound = false;
 
-      if (selectedType == 'personalized') {
-        String usage = CacheHelper.getData(key: 'pref_carUsage') ?? ''; String budget = CacheHelper.getData(key: 'pref_budget') ?? '';
-        titleKey = 'personalized_cars_title'; subtitleKey = usage; isPremium = true;
-        sourceList = await _fetchPersonalizedCarsFromAI(usage, budget);
-      } else if (selectedType == 'new_cars') {
-        sourceList = newCarsList.where((car) => !shownDynamicCarIds.contains(car.id) && !promotedCarsList.any((p)=>p.id==car.id)).toList(); titleKey = 'new_cars'; subtitleKey = 'latest_models';
-      } else if (selectedType == 'used_cars') {
-        sourceList = usedCarsList.where((car) => !shownDynamicCarIds.contains(car.id) && !promotedCarsList.any((p)=>p.id==car.id)).toList(); titleKey = 'used_cars'; subtitleKey = 'quality_preowned';
-      } else if (selectedType == 'news') {
-        sourceList = List.from(newsList); titleKey = 'latest_cars_news'; subtitleKey = 'news_insights';
-      } else if (selectedType == 'top_rated') {
-        sourceList = carsList.where((car) => car.rating >= 4.0 && car.reviewsCount > 0 && !shownDynamicCarIds.contains(car.id) && !promotedCarsList.any((p)=>p.id==car.id)).toList();
-        sourceList.sort((a, b) => b.rating.compareTo(a.rating)); titleKey = 'top_rated_cars'; subtitleKey = 'best_rated_2025'; isPremium = true;
-      } else {
-        sourceList = carsList.where((car) => !shownDynamicCarIds.contains(car.id) && !promotedCarsList.any((p)=>p.id==car.id)).toList(); titleKey = 'curated_for_you'; subtitleKey = 'randomly_selected_for_you'; isPremium = true;
+      while (!sectionFound && sectionRetry < 3) {
+        List<String> availableTypes = ['promoted', 'top_rated', 'new_cars', 'used_cars', 'news'];
+        if (CacheHelper.getData(key: 'survey_completed') == true) availableTypes.add('personalized');
+        if (lastGeneratedType != null && availableTypes.length > 1) availableTypes.remove(lastGeneratedType);
+
+        availableTypes.shuffle();
+        String currentType = availableTypes.first;
+
+        List<dynamic> currentSourceList = [];
+        String currentTitleKey = '';
+        String currentSubtitleKey = '';
+        bool currentIsPremium = false;
+
+        // --- جلب الداتا ---
+        if (currentType == 'news') {
+          currentTitleKey = 'latest_cars_news'; currentSubtitleKey = 'news_insights';
+          currentSourceList = List.from(newsList);
+          if (currentSourceList.isEmpty) {
+            await fetchMoreNews();
+            currentSourceList = List.from(newsList);
+          }
+        }
+        else if (currentType == 'top_rated') {
+          // 🔥 هنا شيلنا شرط الفلترة عشان التوب ريتيد يظهر براحته 🔥
+          currentSourceList = await getActualTopRatedCars();
+          currentTitleKey = 'top_rated_cars'; currentSubtitleKey = 'best_rated_2025'; currentIsPremium = true;
+        }
+        else if (currentType == 'personalized') {
+          String usage = CacheHelper.getData(key: 'pref_carUsage') ?? ''; String budget = CacheHelper.getData(key: 'pref_budget') ?? '';
+          currentTitleKey = 'personalized_cars_title'; currentSubtitleKey = usage; currentIsPremium = true;
+          currentSourceList = await fetchPersonalizedCarsFromAI(usage, budget);
+        }
+        else {
+          void filterLocalData() {
+            if (currentType == 'new_cars') {
+              currentSourceList = newCarsList.where((car) => !shownDynamicCarIds.contains(car.id) && !promotedCarsList.any((p)=>p.id==car.id)).toList(); currentTitleKey = 'new_cars'; currentSubtitleKey = 'latest_models';
+            } else if (currentType == 'used_cars') {
+              currentSourceList = usedCarsList.where((car) => !shownDynamicCarIds.contains(car.id) && !promotedCarsList.any((p)=>p.id==car.id)).toList(); currentTitleKey = 'used_cars'; currentSubtitleKey = 'quality_preowned';
+            } else if (currentType == 'promoted') {
+              currentSourceList = promotedCarsList.where((car) => car.itemType == 'type_car').toList(); currentTitleKey = 'promoted'; currentSubtitleKey = 'premium_listings'; currentIsPremium = true;
+            }
+          }
+
+          filterLocalData();
+
+          if (currentSourceList.length < 4) {
+            int fbRetry = 0; bool keepFetching = true;
+            while (currentSourceList.length < 4 && keepFetching && fbRetry < 3) {
+              try {
+                String targetCollection = (currentType == 'promoted') ? 'promoted_cars' : 'cars';
+                Query query = _firestore.collection(targetCollection);
+                if (currentType == 'new_cars') query = query.where('condition', isEqualTo: 'new_condition');
+                else if (currentType == 'used_cars') query = query.where('condition', isEqualTo: 'used_condition');
+
+                if (lastDocs[currentType] != null) query = query.startAfterDocument(lastDocs[currentType]!);
+
+                final snapshot = await query.limit(20).get();
+                if (snapshot.docs.isEmpty) { keepFetching = false; break; }
+
+                lastDocs[currentType] = snapshot.docs.last;
+
+                for (var doc in snapshot.docs) {
+                  CarModel car = CarModel.fromJson(doc.data() as Map<String, dynamic>);
+                  if (currentType == 'promoted' || !shownDynamicCarIds.contains(car.id)) {
+                    if (currentType == 'promoted') {
+                      if (!promotedCarsList.any((c) => c.id == car.id)) promotedCarsList.add(car);
+                    } else {
+                      if (!carsList.any((c) => c.id == car.id)) carsList.add(car);
+                      if (car.condition == 'new_condition' && !newCarsList.any((c)=>c.id==car.id)) newCarsList.add(car);
+                      else if (car.condition == 'used_condition' && !usedCarsList.any((c)=>c.id==car.id)) usedCarsList.add(car);
+                    }
+                  }
+                }
+                filterLocalData();
+                if (currentSourceList.length < 4) fbRetry++;
+              } catch (e) { keepFetching = false; }
+            }
+          }
+        }
+
+        if (currentSourceList.isNotEmpty) {
+          finalSourceList = currentSourceList; finalTitleKey = currentTitleKey; finalSubtitleKey = currentSubtitleKey; finalIsPremium = currentIsPremium; finalSelectedType = currentType; sectionFound = true;
+        } else {
+          sectionRetry++; lastGeneratedType = currentType;
+        }
       }
 
-      if (selectedType != 'news' && selectedType != 'top_rated' && sourceList.length < 4) {
-        await fetchExternalCarsData();
+      // =========================================================
+      // 🔥 3. إضافة السكشن للشاشة (مع استثناء التوب ريتيد والممول) 🔥
+      // =========================================================
+      if (sectionFound && finalSourceList.isNotEmpty) {
+        if (finalSelectedType != 'top_rated' && finalSelectedType != 'news') finalSourceList.shuffle();
+
+        List<dynamic> selectedItems = finalSelectedType == 'news' ? finalSourceList.take(5).toList() : finalSourceList.take(4).toList();
+
+        // 🔥 الاستثناء هنا: لو السكشن توب ريتيد أو ممول أو أخبار، مش بنسجله في قائمة العربيات المحروقة 🔥
+        if (finalSelectedType != 'news' && finalSelectedType != 'promoted' && finalSelectedType != 'top_rated') {
+          for (var item in selectedItems) shownDynamicCarIds.add(item.id);
+        }
+
+        dynamicBottomSections.add({
+          'titleKey': finalTitleKey, 'subtitleKey': finalSubtitleKey, 'items': selectedItems, 'type': finalSelectedType, 'isPremium': finalIsPremium
+        });
+
+        lastGeneratedType = finalSelectedType;
+        debugPrint("✅ تم عرض سكشن: $finalSelectedType بنجاح!");
       }
 
-      if (selectedType == 'news' && sourceList.isEmpty) { await fetchMoreNews(); sourceList = List.from(newsList); }
-
-      if (sourceList.isNotEmpty) {
-        if (selectedType != 'top_rated' && selectedType != 'news') sourceList.shuffle();
-        List<dynamic> selectedItems = sourceList.take(4).toList();
-        if (selectedType != 'news' && selectedType != 'top_rated') { for (var item in selectedItems) { shownDynamicCarIds.add(item.id); } }
-        dynamicBottomSections.add({'titleKey': titleKey, 'subtitleKey': subtitleKey, 'items': selectedItems, 'type': selectedType, 'isPremium': isPremium});
-      }
-    } catch (e) { }
-    isGeneratingDynamicSection = false; emit(MarketInitial());
+    } catch (e) {
+      debugPrint("❌ Error in generateNextDynamicSection: $e");
+    } finally {
+      isGeneratingDynamicSection = false;
+      emit(MarketInitial());
+    }
   }
-
   Future<void> pickMultipleImages() async { try { final List<XFile> pickedFiles = await _picker.pickMultiImage(); if (pickedFiles.isNotEmpty) { for (var file in pickedFiles) { if (selectedCarImages.length < 10) selectedCarImages.add(File(file.path)); } emit(CarImagePickedSuccess()); } } catch (e) {} } void removeImage(File image) { selectedCarImages.remove(image); emit(MarketInitial()); } void clearSelectedImages() { selectedCarImages.clear(); emit(MarketInitial()); }
 
   Future<void> addCar({
@@ -1322,6 +1433,40 @@ class MarketCubit extends Cubit<MarketState> {
 
     myReviewsList.sort((a, b) => (b['createdAt'] ?? '').compareTo(a['createdAt'] ?? ''));
     isLoadingMyReviews = false;
+    // =========================================================
+    // 🔥 تأمين السكاشن الثابتة (مع كشف الأخطاء وإجبار الشاشة) 🔥
+    // =========================================================
+    debugPrint("🔍 [DEBUG] جاري فحص لستة الجديد قبل قفل getCars... العدد الحالي: ${newCarsList.length}");
+
+    if (newCarsList.isEmpty) {
+      debugPrint("⚠️ [DEBUG] اللستة فاضية! بنحاول نجيب 5 عربيات جديدة فوراً من الفايربيز...");
+      try {
+        final newSnapshot = await _firestore.collection('cars')
+            .where('condition', isEqualTo: 'new_condition')
+            .limit(5).get();
+
+        debugPrint("✅ [DEBUG] الفايربيز رد بـ ${newSnapshot.docs.length} عربيات جديدة.");
+
+        for (var doc in newSnapshot.docs) {
+          CarModel car = CarModel.fromJson(doc.data() as Map<String, dynamic>);
+          if (!carsList.any((c) => c.id == car.id)) {
+            carsList.add(car);
+            newCarsList.add(car);
+          }
+        }
+      } catch (e) {
+        debugPrint("❌ [ERROR] حصل إيرور وإحنا بنجيب الجديد المخصوص: $e");
+      }
+    }
+
+    // ... (ممكن تحط نفس البلوك للـ usedCarsList هنا لو حابب) ...
+
+    // =========================================================
+    // 🔥 السحر هنا: إجبار الشاشة على الريفرش فوراً 🔥
+    // =========================================================
+    emit(MarketLoading()); // صدمة للشاشة عشان تمسح الكاش بتاعها
+    await Future.delayed(const Duration(milliseconds: 100)); // انتظار جزء من الثانية
+    emit(MarketInitial()); // ابعت حالة النجاح النهائية بتاعتك (أو GetCarsSuccess)
     emit(GetCarsSuccess());
   }
 
@@ -1586,35 +1731,51 @@ class MarketCubit extends Cubit<MarketState> {
   }
   Future<List<CarModel>> getActualTopRatedCars() async {
     try {
-      List<CarModel> topCars = carsList.where((car) => car.rating >= 4.0 && car.reviewsCount > 0).toList();
-      topCars.sort((a, b) => b.rating.compareTo(a.rating));
-      return topCars;
+      // 🔥 التعديل السحري: اطلب من الفايربيز العربيات العالية مباشرة بدلاً من الفلترة المحلية
+      final snapshot = await _firestore.collection('cars')
+          .where('rating', isGreaterThanOrEqualTo: 4.0)
+          .orderBy('rating', descending: true)
+          .limit(10) // هات أول 10 عربيات بس
+          .get();
+
+      if (snapshot.docs.isEmpty) return [];
+
+      return snapshot.docs.map((doc) => CarModel.fromJson(doc.data())).toList();
     } catch (e) {
-      return [];
+      // لو النت قطع أو حصل مشكلة، ارجع للفلترة المحلية كخطة بديلة (Fallback)
+      return carsList.where((car) => car.rating >= 4.0 && car.reviewsCount > 0).toList();
     }
   }
+  int filterApiOffset = 0; // 🔥 متغير جديد لتتبع الصفحات
+
   // ========================================================
-  // 🔥 دالة الفلتر بعد التعديل والحماية (V2) 🔥
+  // 🔥 دالة الفلتر بعد التعديل لتدعم السكرول (V3) 🔥
   // ========================================================
-  Future<void> applyFilters({String categoryTitle = ""}) async {
+  Future<void> applyFilters({String categoryTitle = "", bool isLoadMore = false}) async {
     if (selectedFilterBrands.isEmpty && selectedMaxPrice == null) {
       clearFilters();
       return;
     }
 
-    isFilterActive = true;
-    filteredCarsView.clear();
-    emit(FilterCarsLoading());
+    if (!isLoadMore) {
+      isFilterActive = true;
+      filteredCarsView.clear();
+      filterApiOffset = 0;
+      emit(FilterCarsLoading());
+    } else {
+      emit(FilterCarsLoadingMore());
+    }
+
     isFetchingFilteredCars = true;
 
     try {
-      // 1. إرسال الطلب للسيرفر مع حماية הـ null
       final response = await _dio.post(
         '$_baseUrl/api/cars/filter',
         data: {
           "brands": selectedFilterBrands,
-          "maxPrice": selectedMaxPrice ?? 5000000, // 🔥 تأمين لو ملمسش السلايدر
+          "maxPrice": selectedMaxPrice ?? 5000000,
           "limit": 10,
+          "offset": filterApiOffset, // 🔥 بنبعت الأوفست للسيرفر
           "categoryTitle": categoryTitle
         },
         options: Options(receiveTimeout: const Duration(seconds: 30), sendTimeout: const Duration(seconds: 30)),
@@ -1656,20 +1817,28 @@ class MarketCubit extends Cubit<MarketState> {
 
           if (!carsList.any((c) => c.id == fetchedCar.id)) {
             carsList.add(fetchedCar);
+            // 🔥 حفظ العربيات اللي جاية من الفلتر في الفايربيز عشان الكل يستفيد 🔥
+            await _firestore.collection('cars').doc(fetchedCar.id).set(fetchedCar.toMap(), SetOptions(merge: true));
           }
         }
 
-        filteredCarsView = tempFetchedCars;
+        filterApiOffset += tempFetchedCars.length;
+
+        if (isLoadMore) {
+          filteredCarsView.addAll(tempFetchedCars);
+        } else {
+          filteredCarsView = tempFetchedCars;
+        }
+
         _sortFilteredCars();
       }
     } catch (e) {
-      debugPrint("❌ خطأ في الفلتر V2: $e");
+      debugPrint("❌ خطأ في الفلتر V3: $e");
     } finally {
       isFetchingFilteredCars = false;
       emit(GetCarsSuccess());
     }
   }
-
   Future<void> deleteUserItem(CarModel item) async {
     emit(AddCarLoading());
     try {
@@ -1695,5 +1864,57 @@ class MarketCubit extends Cubit<MarketState> {
       if (!isCar) { _blendSpareParts(); }
       emit(MarketInitial());
     } catch (e) { emit(AddCarError("err_delete_ad_failed")); }
+  }
+  Future<void> initializeHomeData() async {
+    emit(MarketLoading());
+    try {
+      // 1. هنجيب الداتا الأساسية العادية
+      await getCars();
+
+      // =======================================================
+      // 🔥 الحل السحري: إجبار الفايربيز يملى السكاشن الثابتة 🔥
+      // =======================================================
+
+      // لو بعد الـ getCars لسه لستة "الجديد" فاضية، هنجيب جديد بالعافية
+      if (newCarsList.isEmpty) {
+        debugPrint("⚠️ لستة الجديد فاضية في البداية.. بنجيب داتا مخصوص عشان السكشن الأول...");
+        final newSnapshot = await _firestore.collection('cars')
+            .where('condition', isEqualTo: 'new_condition')
+            .limit(5).get();
+
+        for (var doc in newSnapshot.docs) {
+          CarModel car = CarModel.fromJson(doc.data() as Map<String, dynamic>);
+          if (!carsList.any((c) => c.id == car.id)) {
+            carsList.add(car);
+            newCarsList.add(car);
+          }
+        }
+      }
+
+      // ولو لستة "المستعمل" فاضية، هنجيب مستعمل بالعافية (عشان السكشن الثابت بتاعها لو موجود)
+      if (usedCarsList.isEmpty) {
+        debugPrint("⚠️ لستة المستعمل فاضية في البداية.. بنجيب داتا مخصوص...");
+        final usedSnapshot = await _firestore.collection('cars')
+            .where('condition', isEqualTo: 'used_condition')
+            .limit(5).get();
+
+        for (var doc in usedSnapshot.docs) {
+          CarModel car = CarModel.fromJson(doc.data() as Map<String, dynamic>);
+          if (!carsList.any((c) => c.id == car.id)) {
+            carsList.add(car);
+            usedCarsList.add(car);
+          }
+        }
+      }
+
+      // 2. بعد ما اتأكدنا إن مفيش لستة فاضية، نبني الديناميكي
+      await generateNextDynamicSection();
+
+    } catch (e) {
+      debugPrint("Error Initializing Home: $e");
+    } finally {
+      // 3. قفل اللودينج وعرض الشاشة
+      emit(MarketInitial());
+    }
   }
 }

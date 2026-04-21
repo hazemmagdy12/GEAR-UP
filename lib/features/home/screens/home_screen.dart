@@ -70,9 +70,9 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
   @override
   void initState() {
     super.initState();
-    final marketCubit = context.read<MarketCubit>();
 
-    // 1. تحميل السيارات الأساسية فوراً
+    final marketCubit = context.read<MarketCubit>();
+    marketCubit.initializeHomeData();    // 1. تحميل السيارات الأساسية فوراً
     if (marketCubit.carsList.isEmpty) marketCubit.getCars();
     if (marketCubit.sparePartsList.isEmpty) marketCubit.getSpareParts();
 
@@ -96,43 +96,51 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
 
     // ... (باقي أكواد الـ Listeners بتاعة الـ ScrollController زي ما هي بدون تغيير)
     _newCarsScrollController.addListener(() {
-      if (_newCarsScrollController.position.pixels >= _newCarsScrollController.position.maxScrollExtent - 150) {
+      if (_newCarsScrollController.position.pixels >= _newCarsScrollController.position.maxScrollExtent - 800) {
         bool added = _injectMoreCarsLocally(_homeNewCars, marketCubit.newCarsList, fallback: marketCubit.carsList);
         if (!added && !marketCubit.isSearchingCategoryAPI) marketCubit.searchCategoryCarsFromAI("", "السيارات الجديدة");
       }
     });
 
     _usedCarsScrollController.addListener(() {
-      if (_usedCarsScrollController.position.pixels >= _usedCarsScrollController.position.maxScrollExtent - 150) {
+      if (_usedCarsScrollController.position.pixels >= _usedCarsScrollController.position.maxScrollExtent - 800) {
         bool added = _injectMoreCarsLocally(_homeUsedCars, marketCubit.usedCarsList, fallback: marketCubit.carsList);
         if (!added && !marketCubit.isSearchingCategoryAPI) marketCubit.searchCategoryCarsFromAI("", "السيارات المستعملة");
       }
     });
 
     _promotedScrollController.addListener(() {
-      if (_promotedScrollController.position.pixels >= _promotedScrollController.position.maxScrollExtent - 150) {
+      if (_promotedScrollController.position.pixels >= _promotedScrollController.position.maxScrollExtent - 800) {
         _injectMoreCarsLocally(_homePromotedCars, marketCubit.promotedCarsList.where((c) => c.itemType == 'type_car'), isPromotedSection: true);
       }
     });
 
     _topRatedScrollController.addListener(() {
-      if (_topRatedScrollController.position.pixels >= _topRatedScrollController.position.maxScrollExtent - 150) {
+      if (_topRatedScrollController.position.pixels >= _topRatedScrollController.position.maxScrollExtent - 800) {
         _injectMoreCarsLocally(_actualTopRatedCars, marketCubit.carsList.where((c) => c.rating >= 4.0 && c.reviewsCount > 0));
       }
     });
 
     _newsScrollController.addListener(() {
-      if (_newsScrollController.position.pixels >= _newsScrollController.position.maxScrollExtent - 150) {
+      if (_newsScrollController.position.pixels >= _newsScrollController.position.maxScrollExtent - 800) {
         if (!marketCubit.isFetchingMoreNews) marketCubit.fetchMoreNews();
       }
     });
 
     _mainScrollController.addListener(() {
-      if (_mainScrollController.position.pixels >= _mainScrollController.position.maxScrollExtent - 200) {
+      // استخدمنا رقم كبير زي ما اتفقنا عشان يعمل Pre-fetching (تحميل مسبق) ويبقى طلقة
+      if (_mainScrollController.position.pixels >= _mainScrollController.position.maxScrollExtent - 800) {
         if (!marketCubit.isFilterActive) {
           marketCubit.generateNextDynamicSection();
+        } else {
+          // 🔥 السطر السحري الجديد: لو الفلتر شغال واليوزر نزل لتحت، هاتله الدفعة اللي بعدها! 🔥
+          if (!marketCubit.isFetchingFilteredCars) {
+            marketCubit.applyFilters(isLoadMore: true);
+          }
         }
       }
+
+      // كود إظهار وإخفاء الزرار العائم (Quick Menu) زي ما هو
       if (_mainScrollController.offset > 200 && !_showQuickMenuIcon) {
         setState(() => _showQuickMenuIcon = true);
       } else if (_mainScrollController.offset <= 200 && _showQuickMenuIcon) {
