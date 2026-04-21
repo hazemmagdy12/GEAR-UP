@@ -70,31 +70,34 @@ class _MyReviewsScreenState extends State<MyReviewsScreen> {
                 final review = reviews[index];
                 double rating = (review['rating'] as num?)?.toDouble() ?? 0.0;
                 String comment = review['comment'] ?? '';
-                String itemId = review['carId'] ?? ''; // Could be car or part
-                String reviewId = review['reviewId'] ?? '';
-                bool isPart = review['isPart'] ?? false;
+
+                // 🔥 التعديل السحري: نقرأ الـ ID أياً كان نوعه، ونحدد النوع بذكاء 🔥
+                String itemId = review['carId'] ?? review['partId'] ?? review['itemId'] ?? '';
+                String reviewId = review['reviewId'] ?? review['id'] ?? '';
+                bool isPart = review['isPart'] == true || review.containsKey('partId') || review['itemType'] == 'type_spare_part';
 
                 DateTime date = DateTime.tryParse(review['createdAt'] ?? '') ?? DateTime.now();
                 String formattedDate = "${date.day}-${date.month}-${date.year}";
 
                 CarModel? reviewedItem;
-                try {
-                  if (isPart) {
-                    reviewedItem = cubit.sparePartsList.firstWhere((p) => p.id == itemId);
-                  } else {
-                    reviewedItem = cubit.carsList.firstWhere((c) => c.id == itemId);
+
+                // 🔥 التعديل السحري التاني: استخدام indexWhere عشان نمنع الكراش نهائياً 🔥
+                if (isPart) {
+                  int idx = cubit.sparePartsList.indexWhere((p) => p.id == itemId);
+                  if (idx != -1) reviewedItem = cubit.sparePartsList[idx];
+                  else {
+                    idx = cubit.promotedPartsList.indexWhere((p) => p.id == itemId);
+                    if (idx != -1) reviewedItem = cubit.promotedPartsList[idx];
                   }
-                } catch (e) {
-                  try {
-                    if (isPart) {
-                      reviewedItem = cubit.promotedPartsList.firstWhere((p) => p.id == itemId);
-                    } else {
-                      reviewedItem = cubit.promotedCarsList.firstWhere((c) => c.id == itemId);
-                    }
-                  } catch (e) { reviewedItem = null; }
+                } else {
+                  int idx = cubit.carsList.indexWhere((c) => c.id == itemId);
+                  if (idx != -1) reviewedItem = cubit.carsList[idx];
+                  else {
+                    idx = cubit.promotedCarsList.indexWhere((c) => c.id == itemId);
+                    if (idx != -1) reviewedItem = cubit.promotedCarsList[idx];
+                  }
                 }
 
-                // حساب اللايكات هنا للعرض فقط
                 List<dynamic> likes = review['likes'] ?? [];
                 int likesCount = likes.length;
 
@@ -140,7 +143,7 @@ class _MyReviewsScreenState extends State<MyReviewsScreen> {
                                     children: [
                                       Text("${reviewedItem.make.toUpperCase()} ${reviewedItem.model}", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: isDark ? Colors.white : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
                                       const SizedBox(height: 4),
-                                      Text(isPart ? "قطعة غيار" : "سيارة", style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
+                                      Text(isPart ? (AppLang.tr(context, 'spare_part') ?? "قطعة غيار") : (AppLang.tr(context, 'car') ?? "سيارة"), style: const TextStyle(color: AppColors.textHint, fontSize: 12, fontWeight: FontWeight.bold)),
                                     ],
                                   ),
                                 ),
@@ -176,7 +179,7 @@ class _MyReviewsScreenState extends State<MyReviewsScreen> {
                             children: [
                               const Icon(Icons.thumb_up_alt_rounded, color: AppColors.primary, size: 18),
                               const SizedBox(width: 6),
-                              Text("$likesCount لايك", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text("$likesCount ${AppLang.tr(context, 'like') ?? 'إعجاب'}", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13)),
                             ],
                           ),
                           Row(

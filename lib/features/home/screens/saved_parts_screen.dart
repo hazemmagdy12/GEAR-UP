@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
-import '../../../core/local_storage/cache_helper.dart'; // 🔥 تم الاستيراد
+import '../../../core/local_storage/cache_helper.dart';
 import '../../home/widgets/part_card.dart';
 import '../../marketplace/cubit/market_cubit.dart';
 import '../../marketplace/cubit/market_state.dart';
-import '../../auth/screens/login_screen.dart'; // 🔥 تم الاستيراد للزوار
+import '../../auth/screens/login_screen.dart';
 
 class SavedPartsScreen extends StatefulWidget {
   const SavedPartsScreen({super.key});
@@ -19,13 +19,17 @@ class _SavedPartsScreenState extends State<SavedPartsScreen> {
   @override
   void initState() {
     super.initState();
-    if (CacheHelper.getData(key: 'uid') != null) {
-      Future.microtask(() {
-        if (mounted) {
+    // 🔥 حماية V2: تطبيق فخ الزائر الشبح داخل الـ Microtask بأمان 🔥
+    Future.microtask(() {
+      if (mounted) {
+        String? uid = CacheHelper.getData(key: 'uid');
+        bool isGuest = uid == null || uid.startsWith('guest_');
+
+        if (!isGuest) {
           context.read<MarketCubit>().getSavedParts();
         }
-      });
-    }
+      }
+    });
   }
 
   // 🔥 الواجهة المخصصة للزوار (لو فتح الشاشة غصب) 🔥
@@ -65,6 +69,10 @@ class _SavedPartsScreenState extends State<SavedPartsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color screenBgColor = isDark ? const Color(0xFF0A0F14) : const Color(0xFFE3F2FD);
 
+    // 🔥 التحقق الذكي من حالة المستخدم 🔥
+    String? uid = CacheHelper.getData(key: 'uid');
+    bool isGuest = uid == null || uid.startsWith('guest_');
+
     return Scaffold(
       backgroundColor: screenBgColor,
       appBar: AppBar(
@@ -92,13 +100,14 @@ class _SavedPartsScreenState extends State<SavedPartsScreen> {
           ),
         ),
       ),
-      body: CacheHelper.getData(key: 'uid') == null
+      body: isGuest
           ? _buildGuestView(context, isDark)
           : BlocBuilder<MarketCubit, MarketState>(
         builder: (context, state) {
           final cubit = context.read<MarketCubit>();
           final savedParts = cubit.savedPartsList;
 
+          // ملاحظة: لو الكيوبيت بتاعك بيستخدم SavedPartsLoading عدلها، لو بيستخدم نفس الـ State بتاعة العربيات سيبها زي ما هي
           if (state is SavedCarsLoading && savedParts.isEmpty) {
             return const Center(child: CircularProgressIndicator(color: AppColors.primary));
           }

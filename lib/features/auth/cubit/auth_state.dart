@@ -12,8 +12,8 @@ class AuthSuccess extends AuthState {
 }
 
 class AuthError extends AuthState {
-  final String message;
-  AuthError(this.message);
+  final String error; // 🔥 تم توحيد الاسم لـ error بدل message
+  AuthError(this.error);
 }
 
 class GetUserLoading extends AuthState {}
@@ -41,7 +41,9 @@ class ProfileImagePickedError extends AuthState {
   ProfileImagePickedError(this.error);
 }
 
-// الحالات الجديدة الخاصة بالموقع (GPS)
+// ==========================================
+// الحالات الخاصة بالموقع (GPS)
+// ==========================================
 class LocationLoading extends AuthState {}
 
 class LocationFetchedSuccess extends AuthState {
@@ -53,6 +55,10 @@ class LocationError extends AuthState {
   final String error;
   LocationError(this.error);
 }
+
+// ==========================================
+// الحالات الخاصة بالاستبيان
+// ==========================================
 class AuthNeedsSurvey extends AuthState {
   final String uid;
   AuthNeedsSurvey(this.uid);

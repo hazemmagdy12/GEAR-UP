@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:url_launcher/url_launcher.dart'; // 🔥 المكتبة الرسمية الآمنة لفتح الإيميل 🔥
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
 import '../../../core/local_storage/cache_helper.dart';
@@ -33,7 +33,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 
   Future<void> checkEmailVerified() async {
+    // 🔥 حماية من الكراش: نتأكد إن الشاشة لسه مفتوحة قبل ما نكمل
+    if (!mounted) return;
+
     await FirebaseAuth.instance.currentUser?.reload();
+
+    // 🔥 حماية تانية: بعد ما الـ reload يخلص (لأنه Async)
+    if (!mounted) return;
+
     setState(() {
       isEmailVerified = FirebaseAuth.instance.currentUser?.emailVerified ?? false;
     });
@@ -90,6 +97,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       _resendCooldown = 60;
     });
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
       setState(() => _resendCooldown--);
       if (_resendCooldown <= 0) {
         t.cancel();
@@ -98,26 +109,18 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
   }
 
-  // 🔥 الدالة الجديدة المضمونة لفتح تطبيق الإيميل 🔥
-  // 🔥 الدالة الجديدة لفتح صندوق الوارد بتاع الجيميل أو الموقع 🔥
   void _openEmailApp() async {
     final Uri gmailWebUrl = Uri.parse('https://mail.google.com');
     final Uri iosGmailAppUrl = Uri.parse('googlegmail://');
 
     try {
-      // لو الموبايل آيفون
       if (Theme.of(context).platform == TargetPlatform.iOS) {
         if (await canLaunchUrl(iosGmailAppUrl)) {
-          // بيفتح تطبيق جيميل للآيفون لو متسطب
           await launchUrl(iosGmailAppUrl, mode: LaunchMode.externalApplication);
         } else {
-          // بيفتح المتصفح لو التطبيق مش موجود
           await launchUrl(gmailWebUrl, mode: LaunchMode.externalApplication);
         }
-      }
-      // لو الموبايل أندرويد
-      else {
-        // الأندرويد بيلقط الرابط ده ويفتح تطبيق الجيميل فوراً، ولو مش متسطب بيفتح جوجل كروم على الجيميل
+      } else {
         await launchUrl(gmailWebUrl, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
@@ -154,9 +157,14 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: isDark ? Colors.white : Colors.black),
-          onPressed: () {
-            FirebaseAuth.instance.signOut();
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+          onPressed: () async {
+            // 🔥 تنظيف كامل لو اليوزر قرر يرجع وميكملش 🔥
+            timer?.cancel();
+            await FirebaseAuth.instance.signOut();
+            await CacheHelper.clearAllDataExcept();
+            if (context.mounted) {
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+            }
           },
         ),
       ),
@@ -227,7 +235,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
               const SizedBox(height: 32),
 
-              // 🔥 الزرار السحري لفتح تطبيق الإيميل (Gmail) 🔥
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(

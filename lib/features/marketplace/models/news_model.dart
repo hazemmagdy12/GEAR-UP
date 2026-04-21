@@ -19,13 +19,14 @@ class NewsModel {
 
   factory NewsModel.fromJson(Map<String, dynamic> json) {
     return NewsModel(
-      id: json['id'] ?? '',
-      title: json['title'] ?? 'خبر جديد',
-      snippet: json['snippet'] ?? 'تفاصيل الخبر...',
-      date: json['date'] ?? '',
-      imageUrl: json['imageUrl'] ?? '',
-      articleUrl: json['articleUrl'] ?? '',
-      createdAt: json['createdAt'] ?? DateTime.now().toIso8601String(),
+      // 🔥 حماية V2: استخدام toString() لتجنب كراش اختلاف نوع البيانات 🔥
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'خبر جديد',
+      snippet: json['snippet']?.toString() ?? 'تفاصيل الخبر...',
+      date: json['date']?.toString() ?? '',
+      imageUrl: json['imageUrl']?.toString() ?? '',
+      articleUrl: json['articleUrl']?.toString() ?? '',
+      createdAt: json['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
     );
   }
 

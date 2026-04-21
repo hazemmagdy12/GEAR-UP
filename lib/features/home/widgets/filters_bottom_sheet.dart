@@ -2,13 +2,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/theme/colors.dart';
+import '../../../core/localization/app_lang.dart'; // 🔥 تم إضافة استيراد الترجمة
 import '../../marketplace/cubit/market_cubit.dart';
 import '../../marketplace/cubit/market_state.dart';
 
 class FiltersBottomSheet extends StatelessWidget {
   const FiltersBottomSheet({super.key});
 
-  // ضفنا كل الماركات الأساسية عشان الفلتر يكون شامل
   final List<String> companies = const [
     "Toyota", "Hyundai", "BMW", "Kia", "Mercedes-Benz", "Audi",
     "Nissan", "Chevrolet", "Volkswagen", "Fiat", "Peugeot",
@@ -44,7 +44,7 @@ class FiltersBottomSheet extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("Filters", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
+                          Text(AppLang.tr(context, 'filters_title') ?? "Filters", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
                           Row(
                             children: [
                               GestureDetector(
@@ -52,7 +52,7 @@ class FiltersBottomSheet extends StatelessWidget {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                                  child: const Text("Clear All", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                                  child: Text(AppLang.tr(context, 'clear_all') ?? "Clear All", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.redAccent)),
                                 ),
                               ),
                               const SizedBox(width: 16),
@@ -81,18 +81,17 @@ class FiltersBottomSheet extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("COMPANY", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
+                        Text(AppLang.tr(context, 'filter_company_label') ?? "COMPANY", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
                         const SizedBox(height: 20),
 
-                        // عرض الماركات في شبكة (Grid) عشان تستوعب العدد الكبير بشياكة
                         GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2, // عمودين
+                            crossAxisCount: 2,
                             crossAxisSpacing: 12,
                             mainAxisSpacing: 12,
-                            childAspectRatio: 2.8, // نسبة العرض للطول عشان تبقى مستطيلة
+                            childAspectRatio: 2.8,
                           ),
                           itemCount: companies.length,
                           itemBuilder: (context, index) {
@@ -125,8 +124,14 @@ class FiltersBottomSheet extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text("MAX PRICE", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
-                            Text(cubit.selectedMaxPrice == null ? "Any Price" : "Up to ${(cubit.selectedMaxPrice! / 1000000).toStringAsFixed(1)}M EGP", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.primary)),
+                            Text(AppLang.tr(context, 'filter_max_price') ?? "MAX PRICE", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.5)),
+                            // 🔥 تحسين عرض السعر والعملة بناءً على اللغة 🔥
+                            Text(
+                                cubit.selectedMaxPrice == null
+                                    ? (AppLang.tr(context, 'any_price') ?? "Any Price")
+                                    : "${(cubit.selectedMaxPrice! / 1000000).toStringAsFixed(1)}${AppLang.tr(context, 'million_currency') ?? 'M'} ${AppLang.tr(context, 'currency_egp') ?? 'EGP'}",
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.primary)
+                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -162,7 +167,7 @@ class FiltersBottomSheet extends StatelessWidget {
                         Navigator.pop(context);
                       },
                       style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
-                      child: const Text("Apply Filters", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                      child: Text(AppLang.tr(context, 'apply_filters_btn') ?? "Apply Filters", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                     ),
                   ),
                 ),

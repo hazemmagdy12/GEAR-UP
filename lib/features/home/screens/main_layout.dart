@@ -160,9 +160,8 @@ class _MainLayoutContentState extends State<MainLayoutContent> {
 
   void _onNavItemTap(int index) {
     if (_currentIndex == index) {
-      setState(() {
-        _screenKeys[index] = GlobalKey();
-      });
+      // 🔥 حماية V2: تم إلغاء تدمير الشاشة (GlobalKey Reset) لمنع رمشة الـ UI وضياع السكرول 🔥
+      return;
     } else {
       _pageController.animateToPage(
         index,
@@ -190,7 +189,6 @@ class _MainLayoutContentState extends State<MainLayoutContent> {
       _aiButtonY = size.height - 180;
     }
 
-    // 🔥 السحر هنا: غلفنا الـ Scaffold كله عشان نمنع اللمس نهائياً لحد ما الجولة تبدأ 🔥
     return AbsorbPointer(
       absorbing: _isTourBlocking,
       child: Scaffold(
@@ -232,6 +230,7 @@ class _MainLayoutContentState extends State<MainLayoutContent> {
       ),
     );
   }
+
   Widget _buildNavItem(int index, IconData icon, IconData activeIcon, String label, GlobalKey? showcaseKey, String? title, String? desc) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSelected = _currentIndex == index;

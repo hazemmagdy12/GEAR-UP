@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 🔥 ضفنا المكتبة دي هنا
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
 import '../../../core/local_storage/cache_helper.dart';
@@ -128,6 +129,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     final Color screenBgColor = isDark ? const Color(0xFF0A0F14) : const Color(0xFFF4F7FA);
 
+    // 🔥 هنسأل فايربيز هنا: هل المستخدم ده مسجل بباسوورد؟
+    bool isPasswordProvider = false;
+    User? firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser != null) {
+      isPasswordProvider = firebaseUser.providerData.any((userInfo) => userInfo.providerId == 'password');
+    }
+
     return Scaffold(
       backgroundColor: screenBgColor,
       appBar: AppBar(
@@ -215,7 +223,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // 🔥 التعديل هنا: الكلمة بقت Clickable وبتفتح الاستوديو زي الصورة بالظبط 🔥
                 GestureDetector(
                   onTap: () {
                     context.read<AuthCubit>().pickProfileImage();
@@ -234,50 +241,53 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 _buildLabelField(AppLang.tr(context, 'phone_number') ?? 'Phone Number', Icons.phone_outlined, _phoneController, isDark, isPhone: true),
                 const SizedBox(height: 32),
 
-                // 🔥 التعديل هنا: زرار تغيير الباسوورد بتصميم بريميوم فخم 🔥
-                GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChangePasswordScreen())),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF161E27) : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: isDark ? Colors.white10 : Colors.black12, width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
-                          blurRadius: 15,
-                          offset: const Offset(0, 6),
-                        )
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.15),
-                            shape: BoxShape.circle,
+                // 🔥 الشرط هنا: لو هو مسجل بباسوورد، اعرض الزرار. لو لأ، متعملش حاجة 🔥
+                // حرف الـ ... هنا معناه (Spread Operator)، يعني بنفك القوسين دول جوه العمود
+                if (isPasswordProvider) ...[
+                  GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChangePasswordScreen())),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF161E27) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: isDark ? Colors.white10 : Colors.black12, width: 1),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
+                            blurRadius: 15,
+                            offset: const Offset(0, 6),
+                          )
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.lock_outline, color: AppColors.primary, size: 22),
                           ),
-                          child: const Icon(Icons.lock_outline, color: AppColors.primary, size: 22),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            AppLang.tr(context, 'change_password') ?? 'Change Password',
-                            style: TextStyle(
-                              color: isDark ? Colors.white : Colors.black87,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              AppLang.tr(context, 'change_password') ?? 'Change Password',
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 16,
+                              ),
                             ),
                           ),
-                        ),
-                        Icon(Icons.arrow_forward_ios_rounded, color: isDark ? Colors.white54 : AppColors.textHint, size: 18),
-                      ],
+                          Icon(Icons.arrow_forward_ios_rounded, color: isDark ? Colors.white54 : AppColors.textHint, size: 18),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 40),
+                  const SizedBox(height: 40),
+                ],
 
                 Row(
                   children: [

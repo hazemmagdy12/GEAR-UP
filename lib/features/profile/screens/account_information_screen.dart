@@ -23,21 +23,21 @@ class AccountInformationScreen extends StatelessWidget {
     }
   }
 
-  // 🔥 دالة عرض الصورة بشكل كامل ومبهر بدون زراير 🔥
-  void _showImageFullScreen(BuildContext context, String imageUrl, String initials) {
+  // 🔥 دالة عرض الصورة متأمنة بالـ Hero Tag الفريد 🔥
+  void _showImageFullScreen(BuildContext context, String imageUrl, String initials, String tagSuffix) {
     showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.85),
       builder: (context) {
         return GestureDetector(
-          onTap: () => Navigator.pop(context), // بمجرد الضغط في أي حتة يقفل
+          onTap: () => Navigator.pop(context),
           child: Material(
             color: Colors.transparent,
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5), // تأثير ضبابي للخلفية
+              filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
               child: Center(
                 child: Hero(
-                  tag: 'profile_image',
+                  tag: 'profile_image_info_$tagSuffix',
                   child: Container(
                     width: MediaQuery.of(context).size.width * 0.85,
                     height: MediaQuery.of(context).size.width * 0.85,
@@ -67,8 +67,6 @@ class AccountInformationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // 🔥 توحيد لون الخلفية الأساسية للدارك واللايت مود 🔥
     final Color screenBgColor = isDark ? const Color(0xFF0A0F14) : const Color(0xFFF4F7FA);
 
     return Scaffold(
@@ -82,10 +80,14 @@ class AccountInformationScreen extends StatelessWidget {
               return const Center(child: CircularProgressIndicator(color: AppColors.primary));
             }
 
-            String name = user?.name ?? 'User';
+            // 🔥 حماية V2: تنظيف الداتا عشان نتفادى الكراش لو اليوزر مسجل بمسافات فاضية 🔥
+            String rawName = (user?.name ?? 'User').trim();
+            String name = rawName.isEmpty ? 'User' : rawName;
+
             String email = user?.email ?? '';
             String phone = user?.phone ?? '';
             String profileImageUrl = user?.profileImage ?? '';
+            String uid = user?.uId ?? 'unknown';
 
             String location = (user?.location != null && user!.location.isNotEmpty)
                 ? user!.location
@@ -94,8 +96,8 @@ class AccountInformationScreen extends StatelessWidget {
             String memberSince = _formatMemberSince(context, user?.createdAt);
 
             String initials = "U";
-            if (user != null && name.isNotEmpty) {
-              List<String> nameParts = name.trim().split(' ');
+            if (name.isNotEmpty) {
+              List<String> nameParts = name.split(RegExp(r'\s+'));
               if (nameParts.length > 1 && nameParts[1].isNotEmpty) {
                 initials = '${nameParts[0][0]}${nameParts[1][0]}'.toUpperCase();
               } else {
@@ -104,11 +106,11 @@ class AccountInformationScreen extends StatelessWidget {
             }
 
             return SingleChildScrollView(
-              padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 24.0, top: 16.0), // قللنا المسافة اللي فوق
+              padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 24.0, top: 16.0),
+              physics: const BouncingScrollPhysics(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 🔥 الهيدر المدمج (زرار الرجوع + العناوين) رفعناه لفوق 🔥
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -116,7 +118,7 @@ class AccountInformationScreen extends StatelessWidget {
                         onTap: () => Navigator.pop(context),
                         child: Container(
                           padding: const EdgeInsets.all(8),
-                          margin: const EdgeInsets.only(top: 4, right: 16),
+                          margin: const EdgeInsets.only(top: 4, right: 16, left: 16), // ظبطنا المارجن للغتين
                           decoration: BoxDecoration(
                             border: Border.all(color: isDark ? Colors.white10 : AppColors.primary.withOpacity(0.3)),
                             borderRadius: BorderRadius.circular(12),
@@ -137,18 +139,18 @@ class AccountInformationScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 32), // قللنا المسافة دي كمان
+                  const SizedBox(height: 32),
 
                   Center(
                     child: Column(
                       children: [
-                        // 🔥 صورة البروفايل القابلة للضغط (Clickable) 🔥
+                        // 🔥 صورة البروفايل القابلة للضغط (Clickable) مع Hero Tag فريد 🔥
                         GestureDetector(
-                          onTap: () => _showImageFullScreen(context, profileImageUrl, initials),
+                          onTap: () => _showImageFullScreen(context, profileImageUrl, initials, uid),
                           child: Hero(
-                            tag: 'profile_image',
+                            tag: 'profile_image_info_$uid',
                             child: Container(
-                              width: 110, // كبرناها سنة تدي فخامة
+                              width: 110,
                               height: 110,
                               decoration: BoxDecoration(
                                 color: AppColors.primary,
@@ -236,7 +238,6 @@ class AccountInformationScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
-        // 🔥 توحيد لون كروت المعلومات للدارك واللايت مود 🔥
         color: isDark ? const Color(0xFF161E27) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFEEEEEE)),

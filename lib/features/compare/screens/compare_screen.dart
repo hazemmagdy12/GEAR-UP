@@ -7,12 +7,15 @@ import '../../home/screens/car_details_screen.dart';
 import '../../marketplace/cubit/market_cubit.dart';
 import '../../marketplace/cubit/market_state.dart';
 import '../../marketplace/models/car_model.dart';
-
+import 'package:intl/intl.dart';
 class CompareScreen extends StatelessWidget {
   const CompareScreen({super.key});
 
   List<Color?> _getComparisonColors(List<String> values, String specType, bool isDark) {
     if (values.length < 2) return List.filled(values.length, null);
+
+    // 🔥 الحماية الأولى: لو بنقارن نصوص، متعملش أي حسابات واخرج فوراً 🔥
+    if (specType == 'text') return List.filled(values.length, null);
 
     List<double> parsedValues = values.map((val) {
       String clean = val.replaceAll(RegExp(r'[^0-9.]'), '');
@@ -129,7 +132,10 @@ class CompareScreen extends StatelessWidget {
   Widget _buildCarHeader(BuildContext context, CarModel car, bool isDark, MarketCubit cubit, Color? priceColor, int carCount) {
     final imageUrl = car.images.isNotEmpty ? car.images.first : null;
     const fallbackImage = 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?q=80&w=800&auto=format&fit=crop';
-    final price = "${AppLang.tr(context, 'currency_egp') ?? 'EGP'} ${car.price.toStringAsFixed(0)}";
+
+    // 🔥 تنسيق السعر الاحترافي بالفواصل (مثلاً: 1,250,000) 🔥
+    final formattedPrice = NumberFormat.decimalPattern().format(car.price);
+    final priceDisplay = "$formattedPrice ${AppLang.tr(context, 'currency_egp') ?? 'EGP'}";
 
     double imageHeight = carCount == 3 ? 105 : 150;
     double modelFontSize = carCount == 3 ? 13 : 16;
@@ -159,7 +165,12 @@ class CompareScreen extends StatelessWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
                     child: imageUrl != null
-                        ? CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover, errorWidget: (c, u, e) => CachedNetworkImage(imageUrl: fallbackImage, fit: BoxFit.cover))
+                        ? CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))),
+                        errorWidget: (c, u, e) => CachedNetworkImage(imageUrl: fallbackImage, fit: BoxFit.cover)
+                    )
                         : CachedNetworkImage(imageUrl: fallbackImage, fit: BoxFit.cover),
                   ),
                 ),
@@ -171,7 +182,8 @@ class CompareScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(price, style: TextStyle(color: priceColor ?? AppColors.primary, fontWeight: FontWeight.w900, fontSize: priceFontSize)),
+          // تم استخدام priceDisplay هنا
+          Text(priceDisplay, style: TextStyle(color: priceColor ?? AppColors.primary, fontWeight: FontWeight.w900, fontSize: priceFontSize)),
           const SizedBox(height: 10),
           GestureDetector(
             onTap: () => cubit.toggleCompareCar(car, context),
@@ -196,7 +208,6 @@ class CompareScreen extends StatelessWidget {
       ),
     );
   }
-
   Widget _buildModernComparisonTable(BuildContext context, List<CarModel> cars, bool isDark, int carCount) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0),

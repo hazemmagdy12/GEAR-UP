@@ -67,7 +67,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 ShaderMask(
                   blendMode: BlendMode.srcIn,
                   shaderCallback: (bounds) => LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: isDark ? [const Color(0xFF64B5F6), const Color(0xFF1976D2)] : [const Color(0xFF2E86AB), const Color(0xFF0A3656)]).createShader(bounds),
-                  child: Text("GEAR UP", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white)),
+                  child: const Text("GEAR UP", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.white)),
                 ),
               ],
             ),
@@ -83,7 +83,8 @@ class _SignupScreenState extends State<SignupScreen> {
                 Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const EmailVerificationScreen()), (route) => false);
               }
               else if (state is AuthError) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
+                // 🔥 تم تصليح الـ State.error والترجمة الذكية 🔥
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLang.tr(context, state.error) ?? state.error), backgroundColor: Colors.red));
               }
             },
             builder: (context, state) {
@@ -100,51 +101,70 @@ class _SignupScreenState extends State<SignupScreen> {
                       Text(AppLang.tr(context, 'join_gear_up') ?? "Join GEAR UP today", style: TextStyle(color: isDark ? Colors.white70 : AppColors.textSecondary, fontSize: 16)),
                       const SizedBox(height: 32),
 
-                      // 🔥 زرار جوجل البريميام 🔥
-                      Container(
-                        width: double.infinity,
-                        height: 58,
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1A1F26) : Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: isDark ? Colors.white.withOpacity(0.1) : Colors.white,
-                            width: 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: isDark ? Colors.black.withOpacity(0.4) : AppColors.primary.withOpacity(0.1),
-                              blurRadius: 15,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(18),
-                            onTap: state is AuthLoading ? null : () => context.read<AuthCubit>().signInWithGoogle(),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Image.asset('assets/images/google.png', height: 24),
-                                const SizedBox(width: 14),
-                                Text(
-                                  AppLang.tr(context, 'continue_with_google') ?? "Continue with Google",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark ? Colors.white : Colors.black87,
+                      // 🔥 أزرار الدخول السريع (جوجل وفيسبوك جمب بعض) 🔥
+                      Row(
+                        children: [
+                          // --------- زرار جوجل ---------
+                          Expanded(
+                            child: Container(
+                              height: 58,
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1A1F26) : Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.white, width: 1),
+                                boxShadow: [BoxShadow(color: isDark ? Colors.black.withOpacity(0.4) : AppColors.primary.withOpacity(0.1), blurRadius: 15, offset: const Offset(0, 6))],
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: state is AuthLoading ? null : () => context.read<AuthCubit>().signInWithGoogle(),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Image.asset('assets/images/google.png', height: 24),
+                                      const SizedBox(width: 10),
+                                      Text("Google", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: isDark ? Colors.white : Colors.black87)),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
+
+                          const SizedBox(width: 16),
+
+                          // --------- زرار فيسبوك ---------
+                          Expanded(
+                            child: Container(
+                              height: 58,
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1A1F26) : Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.white, width: 1),
+                                boxShadow: [BoxShadow(color: isDark ? Colors.black.withOpacity(0.4) : AppColors.primary.withOpacity(0.1), blurRadius: 15, offset: const Offset(0, 6))],
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: state is AuthLoading ? null : () => context.read<AuthCubit>().signInWithFacebook(),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.facebook, color: Color(0xFF1877F2), size: 28),
+                                      const SizedBox(width: 8),
+                                      Text("Facebook", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: isDark ? Colors.white : Colors.black87)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 30),
 
-                      // 🔥 الفاصل الشيك 🔥
                       Row(
                         children: [
                           Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey[300], thickness: 1)),
@@ -164,7 +184,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       TextFormField(
                         controller: _nameController,
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                        validator: (value) => value!.isEmpty ? 'Please enter your name' : null,
+                        validator: (value) => value!.isEmpty ? (AppLang.tr(context, 'name_required') ?? 'Please enter your name') : null,
                         decoration: _inputDecoration(AppLang.tr(context, 'full_name_hint') ?? "Enter your name", Icons.person_outline, isDark),
                       ),
                       const SizedBox(height: 16),
@@ -175,8 +195,8 @@ class _SignupScreenState extends State<SignupScreen> {
                         keyboardType: TextInputType.emailAddress,
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                         validator: (value) {
-                          if (value == null || value.isEmpty) return 'Please enter your email';
-                          if (!value.toLowerCase().trim().endsWith('@gmail.com')) return 'يجب استخدام حساب Gmail فقط (@gmail.com)';
+                          if (value == null || value.isEmpty) return AppLang.tr(context, 'email_required') ?? 'Please enter your email';
+                          if (!value.toLowerCase().trim().endsWith('@gmail.com')) return AppLang.tr(context, 'gmail_only') ?? 'يجب استخدام حساب Gmail فقط (@gmail.com)';
                           return null;
                         },
                         decoration: _inputDecoration("your.name@gmail.com", Icons.email_outlined, isDark),
@@ -193,9 +213,9 @@ class _SignupScreenState extends State<SignupScreen> {
                         textAlign: isAr ? TextAlign.right : TextAlign.left,
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                         validator: (value) {
-                          if (value == null || value.isEmpty) return 'يرجى إدخال رقم الهاتف';
-                          if (value.length != 11) return 'رقم الهاتف يجب أن يكون 11 رقماً';
-                          if (!value.startsWith('01')) return 'يجب أن يبدأ رقم الهاتف بـ 01';
+                          if (value == null || value.isEmpty) return AppLang.tr(context, 'phone_required') ?? 'يرجى إدخال رقم الهاتف';
+                          if (value.length != 11) return AppLang.tr(context, 'phone_length') ?? 'رقم الهاتف يجب أن يكون 11 رقماً';
+                          if (!value.startsWith('01')) return AppLang.tr(context, 'phone_start') ?? 'يجب أن يبدأ رقم الهاتف بـ 01';
                           return null;
                         },
                         decoration: _inputDecoration("\u200E01012345678", Icons.phone_outlined, isDark).copyWith(counterText: ""),
@@ -208,8 +228,8 @@ class _SignupScreenState extends State<SignupScreen> {
                         obscureText: _obscurePassword,
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                         validator: (value) {
-                          if (value == null || value.isEmpty) return 'Please enter your password';
-                          if (value.length < 8) return 'Password must be at least 8 characters';
+                          if (value == null || value.isEmpty) return AppLang.tr(context, 'password_required') ?? 'Please enter your password';
+                          if (value.length < 8) return AppLang.tr(context, 'password_length') ?? 'Password must be at least 8 characters';
                           return null;
                         },
                         decoration: _inputDecoration(AppLang.tr(context, 'password_hint') ?? "********", Icons.lock_outline, isDark).copyWith(
@@ -224,7 +244,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         obscureText: _obscureConfirmPassword,
                         style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                         validator: (value) {
-                          if (value != _passwordController.text) return 'Passwords do not match';
+                          if (value != _passwordController.text) return AppLang.tr(context, 'passwords_do_not_match') ?? 'Passwords do not match';
                           return null;
                         },
                         decoration: _inputDecoration(AppLang.tr(context, 'password_hint') ?? "********", Icons.lock_outline, isDark).copyWith(
@@ -259,7 +279,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                       const SizedBox(height: 40),
 
-                      // 🔥 زرار تغيير اللغة اللي كان ناقص 🔥
+                      // 🔥 زرار تغيير اللغة بعد التنظيف (شيلنا CacheHelper لأنه بيحصل جوه الـ Cubit) 🔥
                       Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -284,9 +304,9 @@ class _SignupScreenState extends State<SignupScreen> {
                                   child: Row(children: [const Icon(Icons.language, color: AppColors.primary, size: 18), const SizedBox(width: 8), Text('العربية', style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 14, fontWeight: FontWeight.w600))]),
                                 ),
                               ],
-                              onChanged: (String? newValue) async {
+                              onChanged: (String? newValue) {
                                 if (newValue != null && newValue != currentLang) {
-                                  await CacheHelper.saveData(key: 'lang', value: newValue);
+                                  // Cubit handles CacheHelper internally now!
                                   context.read<LocaleCubit>().changeLanguage(newValue);
                                 }
                               },

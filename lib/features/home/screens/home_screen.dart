@@ -72,10 +72,20 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
     super.initState();
     final marketCubit = context.read<MarketCubit>();
 
+    // 1. تحميل السيارات الأساسية فوراً
     if (marketCubit.carsList.isEmpty) marketCubit.getCars();
-    if (marketCubit.newCarsList.isEmpty && marketCubit.usedCarsList.isEmpty) marketCubit.fetchExternalCarsData();
-    if (marketCubit.newsList.isEmpty) marketCubit.getNews();
     if (marketCubit.sparePartsList.isEmpty) marketCubit.getSpareParts();
+
+    // 2. تأخير الطلبات الثانوية (الأخبار والـ API الخارجي) جزء من الثانية
+    // عشان ندي فرصة للشاشة تترسم (Render) بنعومة بدون تقطيع
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        if (marketCubit.newCarsList.isEmpty && marketCubit.usedCarsList.isEmpty) {
+          marketCubit.fetchExternalCarsData();
+        }
+        if (marketCubit.newsList.isEmpty) marketCubit.getNews();
+      }
+    });
 
     if (marketCubit.carsList.isNotEmpty) {
       _initializeHomeLists(marketCubit);
@@ -84,6 +94,7 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
 
     _startQuickMenuTimer();
 
+    // ... (باقي أكواد الـ Listeners بتاعة الـ ScrollController زي ما هي بدون تغيير)
     _newCarsScrollController.addListener(() {
       if (_newCarsScrollController.position.pixels >= _newCarsScrollController.position.maxScrollExtent - 150) {
         bool added = _injectMoreCarsLocally(_homeNewCars, marketCubit.newCarsList, fallback: marketCubit.carsList);
@@ -118,13 +129,10 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
 
     _mainScrollController.addListener(() {
       if (_mainScrollController.position.pixels >= _mainScrollController.position.maxScrollExtent - 200) {
-        if (marketCubit.isFilterActive) {
-          marketCubit.fetchFilteredCarsFromAI(isLoadMore: true);
-        } else {
+        if (!marketCubit.isFilterActive) {
           marketCubit.generateNextDynamicSection();
         }
       }
-
       if (_mainScrollController.offset > 200 && !_showQuickMenuIcon) {
         setState(() => _showQuickMenuIcon = true);
       } else if (_mainScrollController.offset <= 200 && _showQuickMenuIcon) {
@@ -132,7 +140,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
       }
     });
   }
-
   bool _injectMoreCarsLocally(List<CarModel> targetList, Iterable<CarModel> primarySource, {Iterable<CarModel>? fallback, int count = 4, bool isPromotedSection = false}) {
     final cubit = context.read<MarketCubit>();
     bool isAllowed(CarModel c) {
@@ -232,8 +239,31 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
   void _loadTopRatedCars() async {
     if (!mounted) return;
     final cubit = context.read<MarketCubit>();
-    final topCars = await cubit.getActualTopRatedCars();
-    if (mounted) { setState(() { _actualTopRatedCars = List.from(topCars); if(_isLoadingTopRated) _isLoadingTopRated = false; }); }
+    setState(() => _isLoadingTopRated = true);
+
+    try {
+      final topCars = await cubit.getActualTopRatedCars();
+      if (mounted) {
+        setState(() {
+          _actualTopRatedCars = List.from(topCars);
+          // 🔥 التعديل السحري: لو السيرفر مرجعش حاجة، نفلتر من اللوكال فوراً 🔥
+          if (_actualTopRatedCars.isEmpty && cubit.carsList.isNotEmpty) {
+            _actualTopRatedCars = cubit.carsList.where((c) => c.rating >= 4.0 && c.reviewsCount > 0).toList();
+          }
+          _isLoadingTopRated = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          // 🔥 حماية قصوى: لو النت فصل، نعرض اللوكال وماتعلقش الشاشة 🔥
+          if (cubit.carsList.isNotEmpty) {
+            _actualTopRatedCars = cubit.carsList.where((c) => c.rating >= 4.0 && c.reviewsCount > 0).toList();
+          }
+          _isLoadingTopRated = false;
+        });
+      }
+    }
   }
 
   Future<void> _handleRefresh() async {
@@ -242,15 +272,35 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
     cubit.dynamicBottomSections.clear();
     setState(() => _isLoadingTopRated = true);
     await cubit.getCars();
+
+    // 🔥 حماية V2: التأكد من إن الشاشة لسه مفتوحة قبل تحديث הـ UI
+    if (!mounted) return;
+
     _initializeHomeLists(cubit);
     _loadTopRatedCars();
   }
 
-  void _startQuickMenuTimer() { _quickMenuTimer?.cancel(); _quickMenuTimer = Timer(const Duration(seconds: 2), () { if (mounted) setState(() => _isQuickMenuCollapsed = true); }); }
+  void _startQuickMenuTimer() {
+    _quickMenuTimer?.cancel();
+    _quickMenuTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _isQuickMenuCollapsed = true);
+    });
+  }
 
   @override
-  void dispose() { _newCarsScrollController.dispose(); _usedCarsScrollController.dispose(); _newsScrollController.dispose(); _mainScrollController.dispose(); _promotedScrollController.dispose(); _topRatedScrollController.dispose(); _quickMenuTimer?.cancel(); for (var controller in _dynamicScrollControllers.values) { controller.dispose(); } super.dispose(); }
+  void dispose() {
+    _newCarsScrollController.dispose();
+    _usedCarsScrollController.dispose();
+    _newsScrollController.dispose();
+    _mainScrollController.dispose();
+    _promotedScrollController.dispose();
+    _topRatedScrollController.dispose();
+    _quickMenuTimer?.cancel();
+    for (var controller in _dynamicScrollControllers.values) { controller.dispose(); }
+    super.dispose();
+  }
 
+  // 🚨 ملاحظة: إنت ممكن تمسح الدالة دي وتستخدم GuestChecker لو حابب كود أنضف، بس هسيبهالك شغالة زي ما هي أماناً ليك 🚨
   void _showGuestDialog(BuildContext context, String featureName) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     showDialog(
@@ -267,7 +317,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
                       const SizedBox(height: 20),
                       Text(AppLang.tr(context, 'login_required') ?? "تسجيل الدخول مطلوب", style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.w900, fontSize: 20)),
                       const SizedBox(height: 12),
-                      // 🔥 تم التعديل هنا لترجمة الرسالة باحترافية
                       Text(
                           "${AppLang.tr(context, 'sorry_cannot') ?? 'عفواً، لا يمكنك '} $featureName ${AppLang.tr(context, 'as_guest') ?? ' كزائر.'}",
                           textAlign: TextAlign.center,
@@ -279,7 +328,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
                           child: ElevatedButton(
                               onPressed: () { Navigator.pop(ctx); Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen())); },
                               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                              // 🔥 تم التعديل هنا
                               child: Text(AppLang.tr(context, 'login') ?? "تسجيل الدخول", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))
                           )
                       ),
@@ -288,7 +336,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
                           width: double.infinity,
                           child: TextButton(
                               onPressed: () => Navigator.pop(ctx),
-                              // 🔥 تم التعديل هنا
                               child: Text(AppLang.tr(context, 'cancel') ?? "إلغاء", style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 15, fontWeight: FontWeight.bold))
                           )
                       )
@@ -314,7 +361,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
                     Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // 🔥 تم التعديل هنا للغات
                           _buildActionCard(isDark: isDark, title: AppLang.tr(context, 'saved_cars') ?? 'Saved Cars', icon: Icons.favorite, iconColor: Colors.red.shade400, onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedCarsScreen())); }),
                           _buildActionCard(isDark: isDark, title: AppLang.tr(context, 'saved_parts') ?? 'Saved Parts', icon: Icons.build_outlined, iconColor: AppColors.primary, onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPartsScreen())); }),
                           _buildActionCard(isDark: isDark, title: AppLang.tr(context, 'find_nearby') ?? 'Find Nearby', icon: Icons.location_on_outlined, iconColor: const Color(0xFFE57373), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const NearbyLocationsScreen())); })
@@ -346,14 +392,23 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
       body: SafeArea(
         child: BlocConsumer<MarketCubit, MarketState>(
           listener: (context, state) {
+            final cubit = context.read<MarketCubit>();
+
+            // شلنا setState(() {}) الفاضية الكارثية واعتمدنا على التهيئة الصحيحة
             if (state is GetCarsSuccess) {
-              setState(() {});
+              _initializeHomeLists(cubit);
               _loadTopRatedCars();
             }
-            else if (state is AddCarSuccess) { _initializeHomeLists(context.read<MarketCubit>()); _loadTopRatedCars(); }
-            else if (state is SearchCarsSuccess || state is FetchExternalCarsSuccess) { _appendNewItemsToHomeLists(context.read<MarketCubit>()); }
+            else if (state is AddCarSuccess) {
+              _initializeHomeLists(cubit);
+              _loadTopRatedCars();
+            }
+            else if (state is SearchCarsSuccess || state is FetchExternalCarsSuccess) {
+              _appendNewItemsToHomeLists(cubit);
+            }
           },
           builder: (context, state) {
+            // ... (باقي كود الـ builder زي ما هو)
             final cubit = context.read<MarketCubit>();
             final isFirebaseLoading = state is GetCarsLoading && cubit.carsList.isEmpty;
             final isApiLoading = state is FetchExternalCarsLoading || cubit.isSearchingCategoryAPI;
@@ -392,6 +447,7 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
                     if (_homePromotedCars.isNotEmpty) _buildPromotedSection(context, isDark, _homePromotedCars, isFirebaseLoading),
                     if (_homePromotedCars.isNotEmpty) const SizedBox(height: 28),
 
+                    // 🔥 تنظيف الترجمة 🔥
                     _buildSectionWrapper(
                         context: context, isDark: isDark, title: AppLang.tr(context, 'top_rated_cars') ?? 'Top Rated Cars', subtitle: AppLang.tr(context, 'best_rated_2025') ?? 'Best rated vehicles', actionText: AppLang.tr(context, 'view_more') ?? 'View More', bgColor: sectionBgColor, isPremium: true,
                         content: _isLoadingTopRated ? const SizedBox(height: 395, child: Center(child: CircularProgressIndicator(color: AppColors.primary))) : _actualTopRatedCars.isEmpty ? SizedBox(height: 200, child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.star_border_rounded, size: 64, color: AppColors.textHint.withOpacity(0.3)), const SizedBox(height: 16), Text(AppLang.tr(context, 'no_rated_cars_yet') ?? "لم يتم تقييم سيارات حتى الآن", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textHint, fontSize: 16))])) ) : _buildCarList(_actualTopRatedCars, false, false, isTopRatedSection: true, controller: _topRatedScrollController), onViewMore: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'top_rated_cars') ?? 'Top Rated Cars')))
@@ -405,14 +461,14 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
                     const SizedBox(height: 28),
 
                     _buildSectionWrapper(
-                        context: context, isDark: isDark, title: AppLang.tr(context, 'latest_cars_news') != 'latest_cars_news' ? AppLang.tr(context, 'latest_cars_news') ?? "News" : "News & Insights", subtitle: AppLang.tr(context, 'latest_automotive_updates') ?? "Latest automotive updates", actionText: AppLang.tr(context, 'view_more'), bgColor: sectionBgColor,
-                        content: _buildNewsList(context, isDark, cubit, _newsScrollController), onViewMore: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'latest_cars_news') != 'latest_cars_news' ? AppLang.tr(context, 'latest_cars_news') ?? "News" : "News & Insights")))
+                        context: context, isDark: isDark, title: AppLang.tr(context, 'latest_cars_news') ?? "News & Insights", subtitle: AppLang.tr(context, 'latest_automotive_updates') ?? "Latest automotive updates", actionText: AppLang.tr(context, 'view_more'), bgColor: sectionBgColor,
+                        content: _buildNewsList(context, isDark, cubit, _newsScrollController), onViewMore: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'latest_cars_news') ?? "News & Insights")))
                     ),
                     const SizedBox(height: 28),
 
                     _buildSectionWrapper(
-                        context: context, isDark: isDark, title: AppLang.tr(context, 'used_cars') != 'used_cars' ? AppLang.tr(context, 'used_cars') ?? "Used Cars" : "Used Cars", subtitle: AppLang.tr(context, 'quality_pre_owned') ?? "Quality pre-owned vehicles", actionText: AppLang.tr(context, 'view_more'), bgColor: sectionBgColor,
-                        content: _buildCarList(_homeUsedCars, isApiLoading && _homeUsedCars.isEmpty, false, controller: _usedCarsScrollController, isFetchingMore: isApiLoading), onViewMore: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'used_cars') != 'used_cars' ? AppLang.tr(context, 'used_cars') ?? "Used Cars" : "Used Cars")))
+                        context: context, isDark: isDark, title: AppLang.tr(context, 'used_cars') ?? "Used Cars", subtitle: AppLang.tr(context, 'quality_pre_owned') ?? "Quality pre-owned vehicles", actionText: AppLang.tr(context, 'view_more'), bgColor: sectionBgColor,
+                        content: _buildCarList(_homeUsedCars, isApiLoading && _homeUsedCars.isEmpty, false, controller: _usedCarsScrollController, isFetchingMore: isApiLoading), onViewMore: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'used_cars') ?? "Used Cars")))
                     ),
                     const SizedBox(height: 28),
 
@@ -520,7 +576,6 @@ class _HomeScreenContentState extends State<HomeScreenContent> {
     return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: isDark ? const Color(0xFF2C2416) : const Color(0xFFFFF9E6), borderRadius: BorderRadius.circular(28)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Row(children: [Text(AppLang.tr(context, 'promoted') ?? 'Promoted', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFFFB74D) : const Color(0xFFD35400))), const SizedBox(width: 12), Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: isDark ? const Color(0xFFFF9800) : const Color(0xFFF39C12), borderRadius: BorderRadius.circular(12)), child: Text(AppLang.tr(context, 'featured_listings') ?? 'Featured', style: TextStyle(color: isDark ? Colors.black87 : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)))]), GestureDetector(onTap: () { Navigator.push(context, MaterialPageRoute(builder: (context) => ViewAllCarsScreen(title: AppLang.tr(context, 'promoted') ?? 'Promoted'))); }, child: Container(padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8), color: Colors.transparent, child: Row(children: [Text(AppLang.tr(context, 'view_more') ?? 'More', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : AppColors.secondary, fontSize: 13)), const SizedBox(width: 4), Icon(Icons.arrow_forward_ios, color: isDark ? Colors.white : AppColors.secondary, size: 12)])))]), const SizedBox(height: 4), Text(AppLang.tr(context, 'premium_listings') ?? 'Premium listings', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : AppColors.textSecondary, fontWeight: FontWeight.w500)), const SizedBox(height: 24), _buildCarList(cars, isLoading, true, controller: _promotedScrollController, isFetchingMore: isLoading), const SizedBox(height: 20),
       LuxuriousShowcase(
         showcaseKey: AppTourKeys.addAdKey,
-        // 🔥 تم التعديل هنا
         title: AppLang.tr(context, 'tour_start_ad_title') ?? 'ابدأ إعلانك',
         description: AppLang.tr(context, 'tour_start_ad_desc') ?? 'اضغط هنا عشان تنشر إعلان سيارتك وتوصل لآلاف المشترين.',
         child: Container(width: double.infinity, decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.premiumGoldStart, AppColors.premiumGoldEnd], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(16)), child: ElevatedButton.icon(onPressed: () { if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'publish_ads_feature') ?? "نشر إعلانات"); return; } Navigator.push(context, MaterialPageRoute(builder: (context) => const StartSellingScreen(initialItemType: 'type_car'))); }, icon: const Icon(Icons.add_circle_outline, color: AppColors.secondary, size: 20), label: Text(AppLang.tr(context, 'start_ad_now') ?? 'Start Ad Now', style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold, fontSize: 15)), style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14)))),

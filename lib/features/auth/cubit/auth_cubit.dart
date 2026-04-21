@@ -6,8 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:cloudinary_public/cloudinary_public.dart';
-
-// الإمبورت الطبيعي اهو (من غير alias عشان مش هنحتاجه خلاص)
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'auth_state.dart';
@@ -21,6 +20,7 @@ class AuthCubit extends Cubit<AuthState> {
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // 🚨 ملاحظة V3: في المستقبل ممكن ننقل رفع الصور للسيرفر زي ما عملنا في العربيات، بس حالياً ده شغال تمام
   final cloudinary = CloudinaryPublic('dfawviyf3', 'zclpevpk', cache: false);
   UserModel? currentUser;
   File? profileImage;
@@ -34,7 +34,7 @@ class AuthCubit extends Cubit<AuthState> {
         emit(ProfileImagePickedSuccess());
       }
     } catch (e) {
-      emit(ProfileImagePickedError(e.toString()));
+      emit(ProfileImagePickedError('image_picker_error')); // 🔥 بقا بيبعت الـ Key
     }
   }
 
@@ -47,7 +47,7 @@ class AuthCubit extends Cubit<AuthState> {
       );
       return response.secureUrl;
     } catch (e) {
-      throw Exception("خطأ في رفع الصورة: $e");
+      throw Exception('upload_image_error'); // 🔥 بيبعت Key
     }
   }
 
@@ -76,7 +76,7 @@ class AuthCubit extends Cubit<AuthState> {
 
       _fetchAndSaveLocationSilently();
     } catch (e) {
-      emit(AuthError(e.toString()));
+      emit(AuthError(e.toString())); // لو ايرور من فايربيز هنسيبه عشان بيبعت التفاصيل
     }
   }
 
@@ -104,47 +104,44 @@ class AuthCubit extends Cubit<AuthState> {
       }
 
     } catch (e) {
-      emit(AuthError("البريد الإلكتروني أو كلمة المرور غير صحيحة"));
+      // 🔥 الترجمة الصح: نبعت الـ Key والـ UI يترجمه
+      emit(AuthError('invalid_email_password'));
     }
   }
 
-  // 🔥 دالة جوجل (النسخة المتوافقة 100% مع إصدار 7.2) 🔥
   Future<void> signInWithGoogle() async {
     emit(AuthLoading());
     try {
-      // 1. تعريف المكتبة بنظام الـ Singleton (بدون أقواس)
       final GoogleSignIn googleSignIn = GoogleSignIn.instance;
 
-      // 2. تمرير الـ ID الإجباري في دالة التهيئة (initialize)
       await googleSignIn.initialize(
         serverClientId: '533950970964-r7o4d03g7pobe98s0b31haq8ej22gnou.apps.googleusercontent.com',
       );
 
-      // 3. فتح شاشة اختيار حساب جوجل (بالدالة الجديدة authenticate)
       final GoogleSignInAccount? googleUser = await googleSignIn.authenticate();
 
       if (googleUser == null) {
-        emit(AuthError('تم إلغاء تسجيل الدخول'));
+        emit(AuthError('google_sign_in_canceled')); // 🔥 Key
         return;
       }
 
-      // 4. استخراج التوثيق (idToken فقط لأن الفايربيز مش بيشترط accessToken في التحديث الجديد)
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final OAuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
       );
 
-      // 5. التسجيل في الفايربيز
       UserCredential userCredential = await _auth.signInWithCredential(credential);
       String uid = userCredential.user!.uid;
 
-      // 6. التحقق من المستخدم في الداتابيز
       DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
 
       if (!doc.exists) {
+        // 🔥 فخ الداتابيز اتصلح: بناخد اسم الإيميل لو مفيش اسم، بدل الكلمة العربي الثابتة
+        String defaultName = userCredential.user!.email?.split('@')[0] ?? 'User';
+
         UserModel userModel = UserModel(
           uId: uid,
-          name: userCredential.user!.displayName ?? 'مستخدم جوجل',
+          name: userCredential.user!.displayName ?? defaultName,
           email: userCredential.user!.email ?? '',
           phone: userCredential.user!.phoneNumber ?? '',
           profileImage: userCredential.user!.photoURL ?? '',
@@ -178,10 +175,75 @@ class AuthCubit extends Cubit<AuthState> {
       }
     } catch (e) {
       if (e is GoogleSignInException && e.code == GoogleSignInExceptionCode.canceled) {
-        emit(AuthError('تم إلغاء تسجيل الدخول'));
+        emit(AuthError('google_sign_in_canceled')); // 🔥 Key
       } else {
-        emit(AuthError("حدث خطأ أثناء تسجيل الدخول بجوجل: ${e.toString()}"));
+        emit(AuthError('google_sign_in_error')); // 🔥 Key
       }
+    }
+  }
+  Future<void> signInWithFacebook() async {
+    emit(AuthLoading());
+    try {
+      // 1. تشغيل نافذة تسجيل الدخول
+      final LoginResult result = await FacebookAuth.instance.login();
+
+      if (result.status == LoginStatus.success) {
+        // 2. استلام التصريح من فيسبوك
+        final OAuthCredential credential = FacebookAuthProvider.credential(result.accessToken!.tokenString);
+        // 3. إرسال التصريح للفايربيز
+        UserCredential userCredential = await _auth.signInWithCredential(credential);
+        String uid = userCredential.user!.uid;
+
+        // 4. فحص هل المستخدم جديد في قاعدة البيانات؟
+        DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+
+        if (!doc.exists) {
+          // لو جديد، نجهز بياناته ونحفظها (الفيس بوك ممكن ميرجعش إيميل أحياناً لو اليوزر قافلها، فبنامن نفسنا)
+          String defaultName = userCredential.user!.displayName ?? userCredential.user!.email?.split('@')[0] ?? 'Facebook User';
+
+          UserModel userModel = UserModel(
+            uId: uid,
+            name: defaultName,
+            email: userCredential.user!.email ?? '',
+            phone: userCredential.user!.phoneNumber ?? '',
+            profileImage: userCredential.user!.photoURL ?? '',
+            location: '',
+            createdAt: DateTime.now().toIso8601String(),
+          );
+
+          await _firestore.collection('users').doc(uid).set(userModel.toMap());
+
+          await CacheHelper.saveData(key: 'is_new_user_$uid', value: true);
+          await CacheHelper.saveData(key: 'uid', value: uid);
+
+          currentUser = userModel;
+          _fetchAndSaveLocationSilently();
+
+          emit(AuthNeedsSurvey(uid));
+        } else {
+          // لو قديم، نجيب بياناته من الداتابيز
+          currentUser = UserModel.fromJson(doc.data() as Map<String, dynamic>);
+          await CacheHelper.saveData(key: 'uid', value: uid);
+
+          _fetchAndSaveLocationSilently();
+
+          bool isNewUser = CacheHelper.getData(key: 'is_new_user_$uid') ?? false;
+          bool surveyCompleted = CacheHelper.getData(key: 'survey_completed') ?? false;
+
+          if (isNewUser && !surveyCompleted) {
+            emit(AuthNeedsSurvey(uid));
+          } else {
+            emit(AuthSuccess(uid));
+          }
+        }
+      } else if (result.status == LoginStatus.cancelled) {
+        emit(AuthError('facebook_sign_in_canceled')); // 🔥 بيبعت Key عشان الـ UI يترجمه
+      } else {
+        emit(AuthError('facebook_sign_in_error')); // 🔥 Key
+      }
+    } catch (e) {
+      print("🚨🚨 FACEBOOK ERROR: $e 🚨🚨"); // السطر ده اللي هيصطادلنا الكود
+      emit(AuthError('facebook_sign_in_error'));
     }
   }
 
@@ -195,7 +257,9 @@ class AuthCubit extends Cubit<AuthState> {
           currentUser = UserModel.fromJson(doc.data() as Map<String, dynamic>);
           emit(GetUserSuccess());
           _fetchAndSaveLocationSilently();
-        } else { emit(GetUserError('لم يتم العثور على بيانات المستخدم')); }
+        } else {
+          emit(GetUserError('user_data_not_found')); // 🔥 Key
+        }
       } catch (e) { emit(GetUserError(e.toString())); }
     }
   }
@@ -230,8 +294,15 @@ class AuthCubit extends Cubit<AuthState> {
         if (currentUser != null) { currentUser = UserModel(uId: currentUser!.uId, name: name, email: email, phone: phone, location: currentUser!.location, createdAt: currentUser!.createdAt, profileImage: currentImageUrl,); }
         clearProfileImage(); emit(UpdateUserSuccess());
       }
-    } catch (e) { emit(UpdateUserError(e.toString())); }
+    } catch (e) { emit(UpdateUserError('update_user_error')); } // 🔥 Key
   }
 
-  Future<void> logout() async { await _auth.signOut(); await CacheHelper.removeData(key: 'uid'); currentUser = null; clearProfileImage(); emit(AuthInitial()); }
+  // 🔥 دالة الخروج (V2): بقت بتستخدم دالة التنظيف الشامل اللي عملناها 🔥
+  Future<void> logout() async {
+    await _auth.signOut();
+    await CacheHelper.clearAllDataExcept(); // مسح ذكي!
+    currentUser = null;
+    clearProfileImage();
+    emit(AuthInitial());
+  }
 }

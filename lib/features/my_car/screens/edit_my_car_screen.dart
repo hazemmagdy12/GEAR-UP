@@ -8,9 +8,10 @@ import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
 import '../../home/widgets/ai_chat_bottom_sheet.dart';
 import '../../marketplace/cubit/market_cubit.dart';
-
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
 class EditMyCarScreen extends StatefulWidget {
-  final Map<String, dynamic>? carData; // لو null يبقى بيضيف عربية جديدة، لو فيه داتا يبقى بيعدل
+  final Map<String, dynamic>? carData;
   const EditMyCarScreen({super.key, this.carData});
 
   @override
@@ -31,7 +32,6 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
   @override
   void initState() {
     super.initState();
-    // لو اليوزر بيعدل عربية موجودة، هنملا البيانات
     if (widget.carData != null) {
       _brandController.text = widget.carData!['make'] ?? '';
       _modelController.text = widget.carData!['model'] ?? '';
@@ -64,7 +64,7 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
         });
       }
     } catch (e) {
-      print("Error picking images: $e");
+      debugPrint("Error picking images: $e");
     }
   }
 
@@ -98,17 +98,18 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
             Text(AppLang.tr(context, 'update_car_info') ?? "تحديث معلومات سيارتك", style: TextStyle(color: isDark ? Colors.white70 : AppColors.textSecondary, fontSize: 14)),
             const SizedBox(height: 32),
 
-            // 🔥 قسم عرض واختيار الصور مع إمكانية الحذف 🔥
+            // 🔥 قسم عرض واختيار الصور متصلح 🔥
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(AppLang.tr(context, 'car_photos') ?? "صور السيارة", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 100,
+                  height: 110,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
                     clipBehavior: Clip.none,
+                    physics: const BouncingScrollPhysics(),
                     children: [
                       // زرار إضافة الصور
                       GestureDetector(
@@ -120,7 +121,7 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                           decoration: BoxDecoration(
                             color: isDark ? const Color(0xFF161E27) : Colors.white,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: isDark ? Colors.white10 : AppColors.primary.withOpacity(0.5), width: 2, style: BorderStyle.solid),
+                            border: Border.all(color: isDark ? Colors.white10 : AppColors.primary.withOpacity(0.5), width: 1.5, style: BorderStyle.solid),
                           ),
                           child: const Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -133,11 +134,12 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                         ),
                       ),
 
-                      // 🔥 عرض الصور الجديدة المختارة مع زرار مسح 🔥
+                      // 🔥 عرض الصور الجديدة 🔥
                       ..._newSelectedImages.asMap().entries.map((entry) {
                         int index = entry.key;
                         File file = entry.value;
                         return Stack(
+                          clipBehavior: Clip.none,
                           children: [
                             Container(
                               width: 100,
@@ -147,8 +149,8 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                               child: ClipRRect(borderRadius: BorderRadius.circular(18), child: Image.file(file, fit: BoxFit.cover)),
                             ),
                             Positioned(
-                              top: 6,
-                              right: 18,
+                              top: -5,
+                              right: 5,
                               child: GestureDetector(
                                 onTap: () => setState(() => _newSelectedImages.removeAt(index)),
                                 child: Container(
@@ -162,11 +164,12 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                         );
                       }),
 
-                      // 🔥 عرض الصور القديمة من الفايربيز مع زرار مسح 🔥
+                      // 🔥 عرض الصور القديمة من الفايربيز 🔥
                       ..._existingImagesUrls.asMap().entries.map((entry) {
                         int index = entry.key;
                         String url = entry.value;
                         return Stack(
+                          clipBehavior: Clip.none,
                           children: [
                             Container(
                               width: 100,
@@ -179,8 +182,8 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                               ),
                             ),
                             Positioned(
-                              top: 6,
-                              right: 18,
+                              top: -5,
+                              right: 5,
                               child: GestureDetector(
                                 onTap: () => setState(() => _existingImagesUrls.removeAt(index)),
                                 child: Container(
@@ -200,16 +203,16 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
             ),
             const SizedBox(height: 40),
 
-            _buildLabelField(AppLang.tr(context, 'car_brand') ?? "ماركة السيارة", Icons.branding_watermark_outlined, _brandController, isDark),
+            _buildLabelField(AppLang.tr(context, 'car_brand') ?? "ماركة السيارة", Icons.branding_watermark_outlined, _brandController, isDark, "مثال: BMW"),
             const SizedBox(height: 24),
-            _buildLabelField(AppLang.tr(context, 'car_model') ?? "موديل السيارة", Icons.directions_car_outlined, _modelController, isDark),
+            _buildLabelField(AppLang.tr(context, 'car_model') ?? "موديل السيارة", Icons.directions_car_outlined, _modelController, isDark, "مثال: X5"),
             const SizedBox(height: 24),
 
             Row(
               children: [
-                Expanded(child: _buildLabelField(AppLang.tr(context, 'manufacturing_year') ?? "سنة الصنع", Icons.calendar_today_outlined, _yearController, isDark, isNumber: true)),
+                Expanded(child: _buildLabelField(AppLang.tr(context, 'manufacturing_year') ?? "سنة الصنع", Icons.calendar_today_outlined, _yearController, isDark, "مثال: 2022", isNumber: true)),
                 const SizedBox(width: 16),
-                Expanded(child: _buildLabelField(AppLang.tr(context, 'mileage_km') ?? "المسافة (كم)", Icons.speed_outlined, _mileageController, isDark, isNumber: true)),
+                Expanded(child: _buildLabelField(AppLang.tr(context, 'mileage_km') ?? "المسافة (كم)", Icons.speed_outlined, _mileageController, isDark, "مثال: 50000", isNumber: true)),
               ],
             ),
             const SizedBox(height: 50),
@@ -231,7 +234,7 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isUploading ? null : () async {
-                      if (_brandController.text.isEmpty || _modelController.text.isEmpty) return;
+                      if (_brandController.text.trim().isEmpty || _modelController.text.trim().isEmpty) return;
 
                       setState(() => _isUploading = true);
 
@@ -240,25 +243,41 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
                       if (_newSelectedImages.isNotEmpty) {
                         try {
                           final cubit = context.read<MarketCubit>();
-                          for (File img in _newSelectedImages) {
+                          final tempDir = await getTemporaryDirectory();
+
+                          for (int i = 0; i < _newSelectedImages.length; i++) {
+                            File img = _newSelectedImages[i];
+                            String targetPath = '${tempDir.path}/comp_mycar_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+
+                            // ضغط الصورة قبل الرفع
+                            XFile? compressedFile = await FlutterImageCompress.compressAndGetFile(
+                              img.absolute.path,
+                              targetPath,
+                              quality: 70,
+                              minWidth: 1024,
+                              minHeight: 1024,
+                              format: CompressFormat.jpeg,
+                            );
+
+                            File fileToUpload = compressedFile != null ? File(compressedFile.path) : img;
+
+                            // رفع الصورة المضغوطة
                             CloudinaryResponse response = await cubit.cloudinary.uploadFile(
-                                CloudinaryFile.fromFile(img.path, folder: 'items_images')
+                                CloudinaryFile.fromFile(fileToUpload.path, folder: 'items_images')
                             );
                             finalImagesUrls.add(response.secureUrl);
                           }
                         } catch (e) {
-                          print("Cloudinary Upload Error: $e");
+                          debugPrint("Cloudinary Upload Error: $e");
                         }
                       }
-
-                      // 🔥 بيسيف هنا حتى لو finalImagesUrls فاضية (بدون صور خالص) 🔥
                       if (mounted) {
                         await context.read<MarketCubit>().saveMyVehicleDetails(
                           vehicleId: widget.carData?['id'],
-                          make: _brandController.text,
-                          model: _modelController.text,
-                          year: _yearController.text,
-                          mileage: _mileageController.text,
+                          make: _brandController.text.trim(),
+                          model: _modelController.text.trim(),
+                          year: _yearController.text.trim(),
+                          mileage: _mileageController.text.trim(),
                           imagesUrls: finalImagesUrls,
                         );
 
@@ -301,32 +320,40 @@ class _EditMyCarScreenState extends State<EditMyCarScreen> {
     );
   }
 
-  Widget _buildLabelField(String label, IconData icon, TextEditingController controller, bool isDark, {bool isNumber = false}) {
+  // 🔥 التعديل السحري هنا: الـ TextField بقى قطعة واحدة وPremium جداً 🔥
+  Widget _buildLabelField(String label, IconData icon, TextEditingController controller, bool isDark, String hint, {bool isNumber = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(icon, size: 20, color: AppColors.primary),
+            Icon(icon, size: 18, color: AppColors.primary),
             const SizedBox(width: 8),
             Text(label, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
           ],
         ),
         const SizedBox(height: 10),
-        Container(
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF161E27) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.02), blurRadius: 6, offset: const Offset(0, 3))],
-          ),
-          child: TextField(
-            controller: controller,
-            keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white : Colors.black87),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        TextField(
+          controller: controller,
+          keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.white : Colors.black87),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 14, fontWeight: FontWeight.normal),
+            filled: true,
+            fillColor: isDark ? const Color(0xFF161E27) : Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: isDark ? Colors.white10 : AppColors.borderLight, width: 1),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: isDark ? Colors.white10 : AppColors.borderLight, width: 1),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: AppColors.primary, width: 2),
             ),
           ),
         ),

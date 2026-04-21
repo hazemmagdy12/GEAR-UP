@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // 🔥 استدعاء الـ Auth
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/local_storage/cache_helper.dart';
 import '../../../core/localization/app_lang.dart';
 import '../../home/screens/main_layout.dart';
-import '../../auth/screens/email_verification_screen.dart'; // 🔥 استدعاء شاشة التوثيق
+import '../../auth/screens/email_verification_screen.dart';
 
 class OnboardingSurveyScreen extends StatefulWidget {
   const OnboardingSurveyScreen({super.key});
@@ -19,20 +19,24 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
   int _currentPage = 0;
 
   bool? _hasCar;
-  String? _carUsage;
-  String? _budgetRange;
+  String? _carUsageKey; // 🔥 هنحفظ الـ Key بدل النص المترجم
+  String? _budgetRangeKey; // 🔥 هنحفظ الـ Key بدل النص المترجم
 
   bool _isSaving = false;
 
   void _nextPage() {
-    if (_currentPage < 4) {
+    if (_currentPage < 3) {
       _pageController.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeInOutCubic);
-    } else {
+    } else if (_currentPage == 3) {
+      // 🔥 أول ما يخلص السؤال الأخير وينتقل للصفحة رقم 4، ابدأ الحفظ أوتوماتيك 🔥
+      _pageController.nextPage(duration: const Duration(milliseconds: 500), curve: Curves.easeInOutCubic);
       _savePreferencesAndFinish();
+    } else {
+      // لو هو في الصفحة الـ 5 وداس على الزرار (تحسباً لو الحفظ خلص بسرعة)
+      _navigateBasedOnVerification();
     }
   }
 
-  // 🔥 دالة التوجيه الذكية (عشان لو مأكدش الإيميل نوديه يأكده) 🔥
   void _navigateBasedOnVerification() {
     bool isVerified = FirebaseAuth.instance.currentUser?.emailVerified ?? false;
     if (isVerified) {
@@ -44,24 +48,28 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
 
   void _skipSurvey() {
     CacheHelper.saveData(key: 'survey_completed', value: true);
-    _navigateBasedOnVerification(); // 🔥 استخدام الدالة هنا
+    _navigateBasedOnVerification();
   }
 
   Future<void> _savePreferencesAndFinish() async {
     setState(() => _isSaving = true);
     String? uid = CacheHelper.getData(key: 'uid') ?? FirebaseAuth.instance.currentUser?.uid;
 
+    // 🔥 هنحفظ القيم الإنجليزية الثابتة أو الـ Keys في الداتابيز عشان الذكاء الاصطناعي يفهمها دايماً 🔥
+    String finalUsage = _carUsageKey ?? 'general_use';
+    String finalBudget = _budgetRangeKey ?? 'open_budget';
+
     await CacheHelper.saveData(key: 'survey_completed', value: true);
     await CacheHelper.saveData(key: 'pref_hasCar', value: _hasCar ?? false);
-    await CacheHelper.saveData(key: 'pref_carUsage', value: _carUsage ?? 'Not Specified');
-    await CacheHelper.saveData(key: 'pref_budget', value: _budgetRange ?? 'Not Specified');
+    await CacheHelper.saveData(key: 'pref_carUsage', value: finalUsage);
+    await CacheHelper.saveData(key: 'pref_budget', value: finalBudget);
 
     if (uid != null && uid.isNotEmpty && !uid.startsWith('guest_')) {
       try {
         Map<String, dynamic> prefs = {
           'hasCar': _hasCar ?? false,
-          'carUsage': _carUsage ?? 'Not Specified',
-          'budgetRange': _budgetRange ?? 'Not Specified',
+          'carUsage': finalUsage,
+          'budgetRange': finalBudget,
           'surveyCompletedAt': DateTime.now().toIso8601String(),
         };
         await FirebaseFirestore.instance.collection('users').doc(uid).set({'preferences': prefs}, SetOptions(merge: true))
@@ -72,9 +80,7 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
     }
 
     if (!mounted) return;
-
-    // 🔥 التوجيه للمكان الصح (الهوم أو الإيميل) 🔥
-    _navigateBasedOnVerification();
+    setState(() => _isSaving = false); // 🔥 وقف اللودينج عشان يظهر زرار الدخول
   }
 
   @override
@@ -88,10 +94,11 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          TextButton(
-            onPressed: _skipSurvey,
-            child: Text(AppLang.tr(context, 'skip') ?? "تخطي", style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontWeight: FontWeight.bold, fontSize: 16)),
-          )
+          if (_currentPage < 4) // إخفاء زر التخطي في الصفحة الأخيرة
+            TextButton(
+              onPressed: _skipSurvey,
+              child: Text(AppLang.tr(context, 'skip') ?? "تخطي", style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontWeight: FontWeight.bold, fontSize: 16)),
+            )
         ],
       ),
       body: SafeArea(
@@ -206,7 +213,7 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
           _buildFeatureRow(Icons.analytics_outlined, AppLang.tr(context, 'feature_3') ?? "تحليل أسعار ومواصفات دقيقة", isDark),
 
           const Spacer(),
-          _buildNextButton(AppLang.tr(context, 'start_customization') ?? "يلا نبدأ التخصيص"),
+          _buildNextButton(AppLang.tr(context, 'start_customization') ?? "يلا نبدأ التخصيص", () => _nextPage()),
           const SizedBox(height: 20),
         ],
       ),
@@ -263,10 +270,10 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
 
   Widget _buildCarUsagePage(bool isDark) {
     List<Map<String, dynamic>> usages = [
-      {'titleKey': 'q2_ans_family', 'defaultTitle': 'عائلية ومريحة', 'icon': Icons.family_restroom},
-      {'titleKey': 'q2_ans_economy', 'defaultTitle': 'اقتصادية للعمل واليومي', 'icon': Icons.work_outline},
-      {'titleKey': 'q2_ans_sport', 'defaultTitle': 'شبابية ورياضية', 'icon': Icons.sports_motorsports_outlined},
-      {'titleKey': 'q2_ans_luxury', 'defaultTitle': 'فخامة ورفاهية', 'icon': Icons.star_border_rounded},
+      {'key': 'family', 'titleKey': 'q2_ans_family', 'defaultTitle': 'عائلية ومريحة', 'icon': Icons.family_restroom},
+      {'key': 'economy', 'titleKey': 'q2_ans_economy', 'defaultTitle': 'اقتصادية للعمل واليومي', 'icon': Icons.work_outline},
+      {'key': 'sport', 'titleKey': 'q2_ans_sport', 'defaultTitle': 'شبابية ورياضية', 'icon': Icons.sports_motorsports_outlined},
+      {'key': 'luxury', 'titleKey': 'q2_ans_luxury', 'defaultTitle': 'فخامة ورفاهية', 'icon': Icons.star_border_rounded},
     ];
 
     return Padding(
@@ -279,7 +286,7 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
           const SizedBox(height: 8),
           Text(AppLang.tr(context, 'q2_title') ?? "ما هو الغرض الأساسي من السيارة؟", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87, height: 1.3)),
           const SizedBox(height: 32),
-          ...usages.map((u) => Padding(padding: const EdgeInsets.only(bottom: 16.0), child: _buildOptionCard(title: AppLang.tr(context, u['titleKey']) ?? u['defaultTitle'], icon: u['icon'], isSelected: _carUsage == (AppLang.tr(context, u['titleKey']) ?? u['defaultTitle']), isDark: isDark, onTap: () { setState(() => _carUsage = AppLang.tr(context, u['titleKey']) ?? u['defaultTitle']); _nextPage(); }))),
+          ...usages.map((u) => Padding(padding: const EdgeInsets.only(bottom: 16.0), child: _buildOptionCard(title: AppLang.tr(context, u['titleKey']) ?? u['defaultTitle'], icon: u['icon'], isSelected: _carUsageKey == u['key'], isDark: isDark, onTap: () { setState(() => _carUsageKey = u['key']); _nextPage(); }))),
         ],
       ),
     );
@@ -287,10 +294,10 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
 
   Widget _buildBudgetPage(bool isDark) {
     List<Map<String, String>> budgets = [
-      {'key': 'q3_ans_1', 'default': 'أقل من 500 ألف ج.م'},
-      {'key': 'q3_ans_2', 'default': 'من 500 ألف إلى مليون ج.م'},
-      {'key': 'q3_ans_3', 'default': 'من مليون إلى 2 مليون ج.م'},
-      {'key': 'q3_ans_4', 'default': 'أكثر من 2 مليون ج.م'}
+      {'key': 'under_500k', 'titleKey': 'q3_ans_1', 'default': 'أقل من 500 ألف ج.م'},
+      {'key': '500k_to_1m', 'titleKey': 'q3_ans_2', 'default': 'من 500 ألف إلى مليون ج.م'},
+      {'key': '1m_to_2m', 'titleKey': 'q3_ans_3', 'default': 'من مليون إلى 2 مليون ج.م'},
+      {'key': 'above_2m', 'titleKey': 'q3_ans_4', 'default': 'أكثر من 2 مليون ج.م'}
     ];
 
     return Padding(
@@ -303,7 +310,7 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
           const SizedBox(height: 8),
           Text(AppLang.tr(context, 'q3_title') ?? "ما هي ميزانيتك التقريبية؟", style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87, height: 1.3)),
           const SizedBox(height: 32),
-          ...budgets.map((b) => Padding(padding: const EdgeInsets.only(bottom: 16.0), child: _buildOptionCard(title: AppLang.tr(context, b['key']!) ?? b['default']!, icon: Icons.account_balance_wallet_outlined, isSelected: _budgetRange == (AppLang.tr(context, b['key']!) ?? b['default']!), isDark: isDark, onTap: () { setState(() => _budgetRange = AppLang.tr(context, b['key']!) ?? b['default']!); _nextPage(); }))),
+          ...budgets.map((b) => Padding(padding: const EdgeInsets.only(bottom: 16.0), child: _buildOptionCard(title: AppLang.tr(context, b['titleKey']!) ?? b['default']!, icon: Icons.account_balance_wallet_outlined, isSelected: _budgetRangeKey == b['key'], isDark: isDark, onTap: () { setState(() => _budgetRangeKey = b['key']!); _nextPage(); }))),
         ],
       ),
     );
@@ -326,7 +333,7 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
             const SizedBox(height: 16),
             Text(AppLang.tr(context, 'prefs_saved_desc') ?? "تم حفظ تفضيلاتك بنجاح، دلوقتي هتشوف العربيات اللي متفصلة على مقاسك بالظبط في الصفحة الرئيسية.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, height: 1.6, color: isDark ? Colors.white70 : AppColors.textSecondary)),
             const SizedBox(height: 40),
-            _buildNextButton(AppLang.tr(context, 'enter_app') ?? "دخول التطبيق"),
+            _buildNextButton(AppLang.tr(context, 'enter_app') ?? "دخول التطبيق", () => _navigateBasedOnVerification()),
           ]
         ],
       ),
@@ -357,11 +364,11 @@ class _OnboardingSurveyScreenState extends State<OnboardingSurveyScreen> {
     );
   }
 
-  Widget _buildNextButton(String text) {
+  Widget _buildNextButton(String text, VoidCallback onPressed) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: _nextPage,
+        onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           padding: const EdgeInsets.symmetric(vertical: 18),

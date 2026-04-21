@@ -26,7 +26,7 @@ class CarModel {
   final double rating;
   final int reviewsCount;
 
-  // 🔥 التعديل الأهم: ضفنا عدد المشاهدات عشان يتقري من الفايربيز 🔥
+  // 🔥 عدد المشاهدات عشان يتقري من الفايربيز 🔥
   final int viewsCount;
 
   final double? tempRating;
@@ -90,19 +90,36 @@ class CarModel {
 
   factory CarModel.fromJson(Map<String, dynamic> json) {
     return CarModel(
-      id: json['id'] ?? '', sellerId: json['sellerId'] ?? '', itemType: json['itemType'] ?? 'type_car',
-      make: json['make'] ?? '', model: json['model'] ?? '', year: json['year'] ?? '',
-      price: json['price']?.toDouble() ?? 0.0, condition: json['condition'] ?? '',
-      description: json['description'] ?? '', images: List<String>.from(json['images'] ?? []),
-      createdAt: json['createdAt'] ?? '', hp: json['hp'] ?? '', cc: json['cc'] ?? '',
-      torque: json['torque'] ?? '', transmission: json['transmission'] ?? '',
-      luggageCapacity: json['luggageCapacity'] ?? '', mileage: json['mileage'] ?? '',
+      id: json['id']?.toString() ?? '',
+      sellerId: json['sellerId']?.toString() ?? '',
+      itemType: json['itemType']?.toString() ?? 'type_car',
+      make: json['make']?.toString() ?? '',
+      model: json['model']?.toString() ?? '',
+      year: json['year']?.toString() ?? '',
+
+      // 🔥 حماية V2: Parsing آمن للأرقام عشان الـ String ميضربش كراش 🔥
+      price: double.tryParse(json['price']?.toString() ?? '0.0') ?? 0.0,
+
+      condition: json['condition']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      images: json['images'] is List ? List<String>.from(json['images']) : [],
+      createdAt: json['createdAt']?.toString() ?? '',
+      hp: json['hp']?.toString() ?? '',
+      cc: json['cc']?.toString() ?? '',
+      torque: json['torque']?.toString() ?? '',
+      transmission: json['transmission']?.toString() ?? '',
+      luggageCapacity: json['luggageCapacity']?.toString() ?? '',
+      mileage: json['mileage']?.toString() ?? '',
+
       // دول بس اللي فيهم عربي، وهنسيبهم زي ما هما كـ Fallback عشان مفيش Context هنا
-      sellerName: json['sellerName'] ?? 'غير معروف', sellerPhone: json['sellerPhone'] ?? 'غير متوفر',
-      sellerLocation: json['sellerLocation'] ?? '', sellerEmail: json['sellerEmail'] ?? '',
-      rating: json['rating']?.toDouble() ?? 0.0,
-      reviewsCount: json['reviewsCount']?.toInt() ?? 0,
-      viewsCount: json['viewsCount']?.toInt() ?? 0, // بيقرا من الفايربيز
+      sellerName: json['sellerName']?.toString() ?? 'غير معروف',
+      sellerPhone: json['sellerPhone']?.toString() ?? 'غير متوفر',
+      sellerLocation: json['sellerLocation']?.toString() ?? '',
+      sellerEmail: json['sellerEmail']?.toString() ?? '',
+
+      rating: double.tryParse(json['rating']?.toString() ?? '0.0') ?? 0.0,
+      reviewsCount: int.tryParse(json['reviewsCount']?.toString() ?? '0') ?? 0,
+      viewsCount: int.tryParse(json['viewsCount']?.toString() ?? '0') ?? 0,
     );
   }
 }

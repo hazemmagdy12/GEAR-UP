@@ -6,13 +6,16 @@ import '../../marketplace/cubit/market_cubit.dart';
 import '../../marketplace/cubit/market_state.dart';
 
 class RemindersScreen extends StatelessWidget {
-  final String carId; // 🔥 بقينا بنستقبل carId هنا 🔥
+  final String carId;
   const RemindersScreen({super.key, required this.carId});
 
   Map<String, dynamic> _calculateReminderStatus(String targetDateStr, BuildContext context) {
     try {
       String cleanDate = targetDateStr.split(' ')[0];
-      DateTime target = DateTime.parse(cleanDate);
+      // 🔥 حماية V2: استخدام tryParse بدل parse لتجنب الكراش 🔥
+      DateTime? target = DateTime.tryParse(cleanDate);
+      if (target == null) throw Exception('Invalid Date Format');
+
       DateTime now = DateTime.now();
       DateTime today = DateTime(now.year, now.month, now.day);
 
@@ -29,11 +32,11 @@ class RemindersScreen extends StatelessWidget {
       } else if (diff == 0) {
         return {'text': AppLang.tr(context, 'today') ?? 'اليوم', 'color': Colors.redAccent, 'progress': 1.0};
       } else if (progress >= 0.90 || diff <= 3) {
-        statusColor = Colors.redAccent; // قرب جداً (أحمر)
+        statusColor = Colors.redAccent;
       } else if (progress >= 0.60) {
-        statusColor = Colors.orangeAccent; // برتقالي
+        statusColor = Colors.orangeAccent;
       } else {
-        statusColor = AppColors.primary; // أزرق (لسه بدري)
+        statusColor = AppColors.primary;
       }
 
       return {
@@ -42,7 +45,7 @@ class RemindersScreen extends StatelessWidget {
         'progress': progress,
       };
     } catch (e) {
-      return {'text': 'Date error', 'color': Colors.grey, 'progress': 0.0};
+      return {'text': AppLang.tr(context, 'date_error') ?? 'تاريخ غير صالح', 'color': Colors.grey, 'progress': 0.0};
     }
   }
 
@@ -109,7 +112,6 @@ class RemindersScreen extends StatelessWidget {
                 builder: (context, state) {
                   final cubit = context.read<MarketCubit>();
 
-                  // 🔥 بنفلتر التذكيرات بناءً على العربية المختارة بس 🔥
                   final allReminders = cubit.myReminders.where((r) => r['carId'] == carId).toList();
 
                   if (allReminders.isEmpty) {
@@ -133,7 +135,9 @@ class RemindersScreen extends StatelessWidget {
 
                   for (var r in allReminders) {
                     try {
-                      DateTime target = DateTime.parse(r['date'].split(' ')[0]);
+                      DateTime? target = DateTime.tryParse(r['date'].split(' ')[0]);
+                      if (target == null) throw Exception('Invalid Date');
+
                       if (target.isBefore(today)) {
                         history.add(r);
                       } else {
@@ -186,7 +190,7 @@ class RemindersScreen extends StatelessWidget {
     required BuildContext context,
     required bool isDark,
     required String id,
-    required String carId, // 🔥 استقبلنا carId هنا
+    required String carId,
     required String title,
     required String date,
     required String frequency,
@@ -266,7 +270,7 @@ class RemindersScreen extends StatelessWidget {
                                     isDark,
                                     isEdit: true,
                                     id: id,
-                                    carId: carId, // 🔥 بنبعت الـ carId للتعديل
+                                    carId: carId,
                                     initialTask: title,
                                     initialDate: date,
                                     initialNotes: frequency,
@@ -336,7 +340,7 @@ class RemindersScreen extends StatelessWidget {
       bool isDark, {
         required bool isEdit,
         String? id,
-        required String carId, // 🔥 خلينا الـ carId إجباري هنا عشان نسجله
+        required String carId,
         String initialTask = "",
         String initialDate = "",
         String initialNotes = "",
@@ -347,11 +351,13 @@ class RemindersScreen extends StatelessWidget {
 
     if (displayDate.isNotEmpty) {
       try {
-        DateTime parsedDate = DateTime.parse(displayDate.split(' ')[0]);
-        DateTime now = DateTime.now();
-        if (parsedDate.year == now.year && parsedDate.month == now.month && parsedDate.day == now.day) {
-          if (!displayDate.contains(todayText)) {
-            displayDate = "${displayDate.split(' ')[0]} ($todayText)";
+        DateTime? parsedDate = DateTime.tryParse(displayDate.split(' ')[0]);
+        if (parsedDate != null) {
+          DateTime now = DateTime.now();
+          if (parsedDate.year == now.year && parsedDate.month == now.month && parsedDate.day == now.day) {
+            if (!displayDate.contains(todayText)) {
+              displayDate = "${displayDate.split(' ')[0]} ($todayText)";
+            }
           }
         }
       } catch (e) {}
@@ -426,18 +432,22 @@ class RemindersScreen extends StatelessWidget {
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () {
-                            if (taskCtrl.text.isNotEmpty && dateCtrl.text.isNotEmpty) {
-                              String cleanDate = dateCtrl.text.split(' ')[0];
-
-                              context.read<MarketCubit>().saveReminder(
-                                id: id,
-                                carId: carId, // 🔥 بنبعت الـ carId للـ Cubit
-                                task: taskCtrl.text,
-                                date: cleanDate,
-                                notes: notesCtrl.text,
-                              );
-                              Navigator.pop(dialogContext);
+                            // 🔥 حماية V2: إجبار اليوزر على إدخال البيانات 🔥
+                            if (taskCtrl.text.trim().isEmpty || dateCtrl.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLang.tr(context, 'fill_required_fields') ?? 'يرجى إدخال المهمة والتاريخ'), backgroundColor: Colors.redAccent));
+                              return;
                             }
+
+                            String cleanDate = dateCtrl.text.split(' ')[0];
+
+                            context.read<MarketCubit>().saveReminder(
+                              id: id,
+                              carId: carId,
+                              task: taskCtrl.text.trim(),
+                              date: cleanDate,
+                              notes: notesCtrl.text.trim(),
+                            );
+                            Navigator.pop(dialogContext);
                           },
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -568,7 +578,8 @@ class RemindersScreen extends StatelessWidget {
         ),
         child: TextField(
           controller: controller,
-          enabled: false,
+          // 🔥 حماية V2: استخدام readOnly عشان يقبل الضغط بدون ما يفتح الكيبورد 🔥
+          readOnly: true,
           style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.w500),
           decoration: InputDecoration(
             labelText: label,
@@ -579,6 +590,43 @@ class RemindersScreen extends StatelessWidget {
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             suffixIcon: Icon(Icons.calendar_today_rounded, color: isDark ? Colors.white54 : Colors.black54, size: 20),
           ),
+          onTap: () async {
+            DateTime? pickedDate = await showDatePicker(
+              context: context,
+              initialDate: DateTime.now(),
+              firstDate: DateTime(2000),
+              lastDate: DateTime(2101),
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: isDark
+                        ? const ColorScheme.dark(
+                      primary: AppColors.primary,
+                      onPrimary: Colors.white,
+                      surface: Color(0xFF161E27),
+                      onSurface: Colors.white,
+                    )
+                        : const ColorScheme.light(
+                      primary: AppColors.primary,
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+
+            if (pickedDate != null) {
+              String formattedDate = "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
+
+              DateTime now = DateTime.now();
+              if (pickedDate.year == now.year && pickedDate.month == now.month && pickedDate.day == now.day) {
+                String todayText = AppLang.tr(context, 'today') ?? "اليوم";
+                formattedDate = "$formattedDate ($todayText)";
+              }
+
+              controller.text = formattedDate;
+            }
+          },
         ),
       ),
     );

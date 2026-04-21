@@ -34,4 +34,14 @@ class CacheHelper {
   static Future<bool> removeData({required String key}) async {
     return await sharedPreferences.remove(key);
   }
+
+  // 🚀 [إضافة V2] دالة تسجيل الخروج: تمسح كل حاجة ما عدا الثوابت (اللغة والثيم) 🚀
+  static Future<void> clearAllDataExcept({List<String> excludedKeys = const ['locale', 'theme']}) async {
+    final keys = sharedPreferences.getKeys();
+    for (String key in keys) {
+      if (!excludedKeys.contains(key)) {
+        await sharedPreferences.remove(key);
+      }
+    }
+  }
 }

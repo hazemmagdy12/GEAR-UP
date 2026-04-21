@@ -22,4 +22,13 @@ class LocaleCubit extends Cubit<Locale> {
       emit(Locale(languageCode));
     }
   }
+
+  // 🚀 [إضافة V2] دالة التبديل السريع: عشان لو حاطط زرار واحد بيبدل بين اللغتين بضغطة 🚀
+  void toggleLanguage() {
+    if (state.languageCode == 'ar') {
+      changeLanguage('en');
+    } else {
+      changeLanguage('ar');
+    }
+  }
 }

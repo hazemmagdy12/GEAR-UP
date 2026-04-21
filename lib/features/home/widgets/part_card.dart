@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
+import '../../../core/local_storage/cache_helper.dart'; // 🔥 تم استيراد الكاش لحماية الزائر
 import '../screens/part_details_screen.dart';
 import '../../marketplace/models/car_model.dart';
 import '../../marketplace/cubit/market_cubit.dart';
@@ -28,8 +29,11 @@ class PartCard extends StatelessWidget {
 
     final title = partItem.make;
     final compatibility = partItem.model;
-    // 🔥 خلينا العملة تترجم حسب اللغة (EGP أو ج.م) 🔥
-    final price = "${AppLang.tr(context, 'currency_egp') ?? 'EGP'} ${partItem.price.toStringAsFixed(0)}";
+
+    // 🔥 السحر هنا: كود بيقسم السعر ويحط فواصل الآلاف 🔥
+    final formattedPrice = partItem.price.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    final price = "${AppLang.tr(context, 'currency_egp') ?? 'EGP'} $formattedPrice";
+
     final imageUrl = partItem.images.isNotEmpty ? partItem.images.first : null;
     const fallbackImage = 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?q=80&w=800&auto=format&fit=crop';
 
@@ -76,16 +80,20 @@ class PartCard extends StatelessWidget {
                     errorWidget: (context, url, error) => CachedNetworkImage(imageUrl: fallbackImage, width: 100, height: 100, fit: BoxFit.cover),
                   ),
                 ),
-                // شارة الـ VIP لو القطعة ممولة
+                // 🔥 تم ضبط الـ PositionedDirectional عشان يقلب مع العربي واللغات تلقائي 🔥
                 if (isActuallyPromoted)
-                  Positioned(
+                  PositionedDirectional(
                     top: 0,
-                    right: 0, // أو left حسب الـ RTL
+                    start: 0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       decoration: const BoxDecoration(
                         color: Color(0xFFF39C12),
-                        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(12), topRight: Radius.circular(16)),
+                        // ضبط الـ Radius عشان يمشي مع اتجاه الشارة
+                        borderRadius: BorderRadiusDirectional.only(
+                            bottomEnd: Radius.circular(12),
+                            topStart: Radius.circular(16)
+                        ),
                       ),
                       child: const Icon(Icons.local_fire_department, color: Colors.white, size: 14),
                     ),
@@ -111,12 +119,18 @@ class PartCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      // 🔥 زرار القلب رجع لمكانه وشغال تمام 🔥
+                      // 🔥 زرار القلب بحماية الزوار (V2 Ready) 🔥
                       BlocBuilder<MarketCubit, MarketState>(
                         builder: (context, state) {
                           bool isSaved = cubit.isPartSaved(partItem.id);
                           return GestureDetector(
-                            onTap: () => cubit.toggleSavedPart(partItem),
+                            onTap: () {
+                              if (CacheHelper.getData(key: 'uid') == null) {
+                                // استدعي GuestChecker هنا لو عايز تطلع الـ Dialog
+                                return;
+                              }
+                              cubit.toggleSavedPart(partItem);
+                            },
                             child: Icon(
                               isSaved ? Icons.favorite : Icons.favorite_border,
                               color: isSaved ? Colors.redAccent : (isDark ? Colors.white54 : AppColors.textHint),
@@ -129,7 +143,7 @@ class PartCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    AppLang.tr(context, 'compatibility') ?? "التوافق",
+                    AppLang.tr(context, 'compatibility') ?? "متوافق مع:",
                     style: TextStyle(color: isDark ? Colors.white54 : AppColors.textHint, fontSize: 11),
                   ),
                   Text(

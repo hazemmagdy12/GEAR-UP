@@ -8,6 +8,8 @@ environment:
   sdk: ^3.11.0
 
 dependencies:
+  flutter_image_compress: ^2.3.0  # أو أحدث إصدار
+  path_provider: ^2.1.3
   flutter:
     sdk: flutter
   flutter_localizations:
@@ -67,6 +69,7 @@ dependencies:
   # 🔥 الباكدج الخاصة بالسبلاش سكرين
   flutter_native_splash: ^2.4.0
   google_sign_in: ^7.2.0
+  flutter_facebook_auth: ^7.1.6
 
 dev_dependencies:
   flutter_test:

@@ -80,7 +80,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // 🔥 الدالة المؤمنة للتشييك على السيرفاي 🔥
   Future<void> _checkSurveyAndNavigate() async {
     setState(() => _isCheckingSurvey = true);
     String? uid = CacheHelper.getData(key: 'uid');
@@ -146,7 +145,13 @@ class _LoginScreenState extends State<LoginScreen> {
           } else if (state is AuthNeedsVerification) {
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const EmailVerificationScreen()));
           } else if (state is AuthError) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message), backgroundColor: Colors.red));
+            // 🔥 الترجمة الذكية: بيترجم الـ Key لو موجود، لو مش موجود بيعرض الإيرور زي ما هو 🔥
+            ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                    content: Text(AppLang.tr(context, state.error) ?? state.error),
+                    backgroundColor: Colors.red
+                )
+            );
           }
         },
         builder: (context, state) {
@@ -163,60 +168,83 @@ class _LoginScreenState extends State<LoginScreen> {
                   Text(AppLang.tr(context, 'sign_in') ?? "Sign in to continue", style: TextStyle(color: isDark ? Colors.white70 : AppColors.textSecondary, fontSize: 16)),
                   const SizedBox(height: 32),
 
-                  // 🔥 زرار جوجل البريميام 🔥
-                  Container(
-                    width: double.infinity,
-                    height: 58,
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1A1F26) : Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(
-                        color: isDark ? Colors.white.withOpacity(0.1) : Colors.white,
-                        width: 1,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isDark ? Colors.black.withOpacity(0.4) : AppColors.primary.withOpacity(0.1),
-                          blurRadius: 15,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(18),
-                        onTap: (state is AuthLoading || _isCheckingSurvey)
-                            ? null
-                            : () => context.read<AuthCubit>().signInWithGoogle(),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Image.asset('assets/images/google.png', height: 24),
-                            const SizedBox(width: 14),
-                            Text(
-                              AppLang.tr(context, 'continue_with_google') ?? "Continue with Google",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: isDark ? Colors.white : Colors.black87,
+                  // 🔥 أزرار الدخول السريع (جوجل وفيسبوك جمب بعض) 🔥
+                  Row(
+                    children: [
+                      // --------- زرار جوجل ---------
+                      Expanded(
+                        child: Container(
+                          height: 58,
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1A1F26) : Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.white, width: 1),
+                            boxShadow: [BoxShadow(color: isDark ? Colors.black.withOpacity(0.4) : AppColors.primary.withOpacity(0.1), blurRadius: 15, offset: const Offset(0, 6))],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(18),
+                              // في شاشة الـ Signup ممكن متكونش عندك _isCheckingSurvey، فلو جابت إيرور هناك امسحها وسيب state is AuthLoading بس
+                              onTap: (state is AuthLoading || (this is _LoginScreenState && (_isCheckingSurvey ?? false)))
+                                  ? null
+                                  : () => context.read<AuthCubit>().signInWithGoogle(),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Image.asset('assets/images/google.png', height: 24),
+                                  const SizedBox(width: 10),
+                                  Text("Google", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: isDark ? Colors.white : Colors.black87)),
+                                ],
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
+
+                      const SizedBox(width: 16), // مسافة بين الزرارين
+
+                      // --------- زرار فيسبوك ---------
+                      Expanded(
+                        child: Container(
+                          height: 58,
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1A1F26) : Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.white, width: 1),
+                            boxShadow: [BoxShadow(color: isDark ? Colors.black.withOpacity(0.4) : AppColors.primary.withOpacity(0.1), blurRadius: 15, offset: const Offset(0, 6))],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(18),
+                              onTap: (state is AuthLoading || (this is _LoginScreenState && (_isCheckingSurvey ?? false)))
+                                  ? null
+                                  : () => context.read<AuthCubit>().signInWithFacebook(),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  // استخدمنا أيقونة فلاتر الجاهزة لفيسبوك بلونها الأزرق المميز عشان متدورش على صورة
+                                  const Icon(Icons.facebook, color: Color(0xFF1877F2), size: 28),
+                                  const SizedBox(width: 8),
+                                  Text("Facebook", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: isDark ? Colors.white : Colors.black87)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 30),
 
-                  // 🔥 الفاصل الشيك بين جوجل والإيميل 🔥
                   Row(
                     children: [
                       Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey[300], thickness: 1)),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Text(
-                          AppLang.tr(context, 'or_login_with_email') ?? "Or login with email", // ضيف الكلمة دي في ملف الترجمة لو مش موجودة
+                          AppLang.tr(context, 'or_login_with_email') ?? "Or login with email",
                           style: TextStyle(color: isDark ? Colors.white38 : Colors.grey[500], fontWeight: FontWeight.w600, fontSize: 13),
                         ),
                       ),
@@ -229,8 +257,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _emailController,
+                    keyboardType: TextInputType.emailAddress, // بيفتح كيبورد الإيميل
                     style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                    validator: (value) => value!.isEmpty ? 'Please enter your email' : null,
+                    validator: (value) => value!.isEmpty ? (AppLang.tr(context, 'email_required') ?? 'برجاء إدخال الإيميل') : null, // 🔥 مترجمة
                     decoration: _inputDecoration(AppLang.tr(context, 'email_hint') ?? "your@email.com", Icons.email_outlined, isDark),
                   ),
                   const SizedBox(height: 20),
@@ -241,7 +270,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                    validator: (value) => value!.isEmpty ? 'Please enter your password' : null,
+                    validator: (value) => value!.isEmpty ? (AppLang.tr(context, 'password_required') ?? 'برجاء إدخال كلمة المرور') : null, // 🔥 مترجمة
                     decoration: _inputDecoration(AppLang.tr(context, 'password_hint') ?? "********", Icons.lock_outline, isDark).copyWith(
                       suffixIcon: IconButton(icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: AppColors.textHint), onPressed: () => setState(() => _obscurePassword = !_obscurePassword)),
                     ),

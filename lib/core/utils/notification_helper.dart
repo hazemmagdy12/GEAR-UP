@@ -24,51 +24,77 @@ class NotificationHelper {
     // 2. تفعيل استقبال الإشعارات في الخلفية
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 🔥 3. إنشاء قناة الإشعارات (ضروري جداً لأندرويد 8+) 🔥
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    // 🔥 3. إنشاء قنوات الإشعارات (الأساسية + السرينة) لأندرويد 8+ 🔥
+    const AndroidNotificationChannel defaultChannel = AndroidNotificationChannel(
       'gear_up_channel',
       'Gear Up Notifications',
       importance: Importance.max,
     );
 
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+    const AndroidNotificationChannel sirenChannel = AndroidNotificationChannel(
+      'siren_channel_id',
+      'Siren Notifications',
+      description: 'Maintenance Reminders',
+      importance: Importance.max,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('siren'),
+    );
+
+    final androidPlugin = _localNotifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.createNotificationChannel(defaultChannel);
+    await androidPlugin?.createNotificationChannel(sirenChannel);
 
     // 4. إعدادات الإشعارات المحلية
     const AndroidInitializationSettings androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const InitializationSettings initSettings = InitializationSettings(android: androidInit);
     await _localNotifications.initialize(initSettings);
 
-    // 5. جلب التوكن
-    _firebaseMessaging.getToken().then((token) async {
-      print("🔥 FCM Token: $token");
-      if (token != null) {
-        String? uid = CacheHelper.getData(key: 'uid');
-        if (uid != null && uid.isNotEmpty) {
-          try {
-            await FirebaseFirestore.instance.collection('users').doc(uid).set(
-              {'fcmToken': token},
-              SetOptions(merge: true),
-            );
-          } catch (e) {
-            print("❌ خطأ في حفظ التوكن: $e");
-          }
-        }
-      }
+    // 5. جلب التوكن لأول مرة
+    _firebaseMessaging.getToken().then((token) => _updateTokenInFirestore(token));
+
+    // 6. تحديث التوكن أوتوماتيك لو جوجل غيرته
+    _firebaseMessaging.onTokenRefresh.listen((newToken) {
+      print("🔄 تم تجديد الـ FCM Token: $newToken");
+      _updateTokenInFirestore(newToken);
     });
 
-    // 6. استقبال الإشعارات والأبلكيشن مفتوح
+    // 🔥 7. استقبال الإشعارات والأبلكيشن مفتوح (توجيه ذكي) 🔥
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (message.notification != null) {
-        _showLocalNotification(message);
+        // لو السيرفر باعت إن ده تذكير صيانة، نشغل السرينة حتى لو الأبلكيشن مفتوح
+        if (message.data['type'] == 'reminder') {
+          showSirenNotification(
+            message.notification!.title ?? 'تنبيه',
+            message.notification!.body ?? 'لديك موعد صيانة!',
+          );
+        } else {
+          // أي إشعار تاني (أخبار، ريفيو، مسج) يروح للقناة العادية
+          _showLocalNotification(message);
+        }
       }
     });
   }
 
+  // دالة مساعدة لتحديث التوكن في الفايربيز
+  static Future<void> _updateTokenInFirestore(String? token) async {
+    if (token == null) return;
+    print("🔥 FCM Token: $token");
+    String? uid = CacheHelper.getData(key: 'uid');
+    if (uid != null && uid.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(uid).set(
+          {'fcmToken': token},
+          SetOptions(merge: true),
+        );
+      } catch (e) {
+        print("❌ خطأ في حفظ التوكن: $e");
+      }
+    }
+  }
+
   static void _showLocalNotification(RemoteMessage message) {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'gear_up_channel', // لازم نفس اسم القناة اللي فوق
+      'gear_up_channel',
       'Gear Up Notifications',
       importance: Importance.max,
       priority: Priority.high,
@@ -88,7 +114,7 @@ class NotificationHelper {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'siren_channel_id',
       'Siren Notifications',
-      channelDescription: 'قناة مخصصة لتنبيهات الصيانة بصوت السرينة',
+      channelDescription: 'Maintenance Reminders',
       importance: Importance.max,
       priority: Priority.high,
       playSound: true,

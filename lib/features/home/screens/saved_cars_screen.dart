@@ -19,9 +19,17 @@ class _SavedCarsScreenState extends State<SavedCarsScreen> {
   @override
   void initState() {
     super.initState();
-    if (CacheHelper.getData(key: 'uid') != null) {
-      context.read<MarketCubit>().getSavedCars();
-    }
+    // 🔥 حماية V2: التأكد من إن الـ Widget اتبنى الأول، وحماية من "الزائر الشبح" 🔥
+    Future.microtask(() {
+      if (mounted) {
+        String? uid = CacheHelper.getData(key: 'uid');
+        bool isGuest = uid == null || uid.startsWith('guest_');
+
+        if (!isGuest) {
+          context.read<MarketCubit>().getSavedCars();
+        }
+      }
+    });
   }
 
   // 🔥 الواجهة المخصصة للزوار (لو فتح الشاشة غصب) 🔥
@@ -64,6 +72,10 @@ class _SavedCarsScreenState extends State<SavedCarsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final Color screenBgColor = isDark ? const Color(0xFF0A0F14) : const Color(0xFFE3F2FD);
 
+    // 🔥 التحقق الذكي من حالة المستخدم 🔥
+    String? uid = CacheHelper.getData(key: 'uid');
+    bool isGuest = uid == null || uid.startsWith('guest_');
+
     return Scaffold(
       backgroundColor: screenBgColor,
       appBar: AppBar(
@@ -91,7 +103,7 @@ class _SavedCarsScreenState extends State<SavedCarsScreen> {
           ),
         ),
       ),
-      body: CacheHelper.getData(key: 'uid') == null
+      body: isGuest
           ? _buildGuestView(context, isDark)
           : BlocBuilder<MarketCubit, MarketState>(
         builder: (context, state) {

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ChatMessage {
   final String text;
@@ -145,9 +146,11 @@ class _AiChatBottomSheetState extends State<AiChatBottomSheet> {
       chatText += "${m.isUser ? youText : assistantText}:\n${m.text}\n\n";
     }
 
-    Clipboard.setData(ClipboardData(text: chatText));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLang.tr(context, 'chat_copied_success') ?? "تم النسخ"), backgroundColor: AppColors.primary),
+    SharePlus.instance.share(
+      ShareParams(
+        text: chatText,
+        subject: 'محادثة ذكية من تطبيق Gear Up',
+      ),
     );
   }
 
@@ -211,13 +214,13 @@ class _AiChatBottomSheetState extends State<AiChatBottomSheet> {
     _chatHistory.clear();
     _chatHistory.add({
       "role": "system",
-      "content": "You are an expert automotive AI assistant for the 'Gear Up' app. "
-          "CRITICAL RULES FOR ARABIC RESPONSES: "
-          "1. ALWAYS reply in natural, friendly Egyptian Arabic (العامية المصرية الدارجة). "
-          "2. DO NOT mix English words in the middle of an Arabic sentence unless it is absolutely necessary (like a car brand 'BMW'). "
-          "3. Structure your response clearly using simple line breaks. DO NOT use complex markdown formats like tables. "
-          "4. Maintain a perfect Right-to-Left (RTL) reading flow. Keep numbers and English words properly isolated so the sentence doesn't break. "
-          "If the user asks in English, reply in English normally. Be concise and highly professional."
+      "content": "أنت 'مساعد جير أب' (Gear Up Assistant)، خبير سيارات محترف وودود في السوق المصري. "
+          "قواعد صارمة جداً للردود: "
+          "1. دائماً جاوب باللهجة المصرية العامية الدارجة والمحترمة. "
+          "2. لما المستخدم يطلب ترشيح سيارة لميزانية أو استخدام معين، اقترح عليه 2 لـ 3 سيارات بالاسم، وقوله نصاً في نهاية كلامك: 'تقدر تكتب أسامي العربيات دي في شريط البحث في التطبيق أو تستخدم الفلاتر عشان تشوف المتاح حالياً وأسعارهم'. "
+          "3. أنت لا تمتلك روابط (Links) مباشرة للسيارات، فلا تحاول اختراع أي روابط. دائمًا وجه المستخدم لاستخدام ميزة 'البحث' أو 'الفلاتر' داخل التطبيق. "
+          "4. حافظ على تنسيق الرد بسيط، واستخدم فواصل الأسطر. لا تستخدم جداول معقدة أو تنسيق Markdown مبالغ فيه. "
+          "5. إذا سألك المستخدم باللغة الإنجليزية، أجب باللغة الإنجليزية باحترافية مع نفس النصائح بالبحث في التطبيق."
     });
 
     for (var msg in _messages) {
@@ -228,26 +231,31 @@ class _AiChatBottomSheetState extends State<AiChatBottomSheet> {
     }
   }
 
-  // 🔥 دالة الإرسال المتأمنة اللي بتكلم سيرفرك 🔥
   Future<void> _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
 
     setState(() {
+      // 1. نضيف رسالة اليوزر
       _messages.add(ChatMessage(text: text, isUser: true));
-      _isLoading = true;
+      // 🔥 2. نضيف رسالة "فاضية" للذكاء الاصطناعي عشان نملاها حرف بحرف لايف
+      _messages.add(ChatMessage(text: "", isUser: false));
+      _isLoading = true; // نظهر أيقونة إنه بيفكر
     });
-    await _saveAllChats();
 
+    // 🔥 3. مسح المربع والنزول فوراً (حل جذري لمشكلة تهنيج الشاشة) 🔥
     _messageController.clear();
     _scrollToBottom();
+    _saveAllChats(); // حفظ في الخلفية بدون ما نوقف التطبيق
 
     try {
       final response = await _dio.post(
-        'https://d897c33f-6257-4a85-9126-2bc9c6be829e-00-dd6nn6kccr87.spock.replit.dev/api/ai/openrouter-chat',
+        'https://gear-up-backend.vercel.app/api/ai/openrouter-chat',
         options: Options(
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'text/event-stream', // نفهم السيرفر إننا مستنيين Stream
           },
+          responseType: ResponseType.stream, // نفهم Dio إنه هيستقبل Stream
           validateStatus: (status) => true,
         ),
         data: {
@@ -256,32 +264,54 @@ class _AiChatBottomSheetState extends State<AiChatBottomSheet> {
       );
 
       if (response.statusCode == 200) {
-        final aiText = response.data['choices'][0]['message']['content'];
+        setState(() { _isLoading = false; }); // نشيل أيقونة التحميل لأن الكلام بدأ يوصل
 
-        if (mounted) {
-          setState(() {
-            _messages.add(ChatMessage(text: aiText, isUser: false));
-            _isLoading = false;
-          });
-          await _saveAllChats();
-          _scrollToBottom();
+        final stream = response.data!.stream;
+
+        // 🔥 حلقة الاستقبال (بتقرأ كل حتة بتوصل وتفك تشفيرها وتعرضها) 🔥
+        await for (var chunk in stream) {
+          final chunkString = utf8.decode(chunk, allowMalformed: true);
+          final lines = chunkString.split('\n');
+
+          for (var line in lines) {
+            if (line.startsWith('data: ') && !line.contains('[DONE]')) {
+              try {
+                final jsonData = jsonDecode(line.substring(6));
+                final delta = jsonData['choices'][0]['delta']['content'];
+
+                if (delta != null) {
+                  setState(() {
+                    // بنلزق الحرف الجديد على آخر رسالة (رسالة الـ AI الفاضية اللي عملناها فوق)
+                    _messages.last = ChatMessage(
+                        text: _messages.last.text + delta,
+                        isUser: false
+                    );
+                  });
+                  _scrollToBottom();
+                }
+              } catch (e) {
+                // تجاهل أي جزء غير صالح برمجياً من الـ JSON
+              }
+            }
+          }
         }
+
+        // أول ما الـ Stream يخلص نهائياً، نحفظ الشات بالكامل
+        await _saveAllChats();
       } else {
         throw Exception('Server Error ${response.statusCode}');
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _messages.add(ChatMessage(text: AppLang.tr(context, 'connection_error') ?? 'حدث خطأ في الاتصال، حاول مرة أخرى', isUser: false));
+          _messages.last = ChatMessage(text: AppLang.tr(context, 'connection_error') ?? 'حدث خطأ في الاتصال، حاول مرة أخرى', isUser: false);
           _isLoading = false;
         });
         _scrollToBottom();
       }
-      _messages.removeLast(); // اختياري عشان ميحفظش الخطأ
       await _saveAllChats();
     }
   }
-
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -366,7 +396,8 @@ class _AiChatBottomSheetState extends State<AiChatBottomSheet> {
           return Scaffold(
             key: _scaffoldKey,
             backgroundColor: Colors.transparent,
-            resizeToAvoidBottomInset: true,
+            // 🔥 حل مشكلة الـ Layout مع الكيبورد 🔥
+            resizeToAvoidBottomInset: false,
 
             drawer: Drawer(
               backgroundColor: isDark ? const Color(0xFF191919) : const Color(0xFFF9F9FB),
@@ -508,303 +539,307 @@ class _AiChatBottomSheetState extends State<AiChatBottomSheet> {
               ),
             ),
 
-            body: Container(
-              decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 25, spreadRadius: 5),
-                  ]
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(colors: [AppColors.primary, Color(0xFF1E3A5F)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.menu_rounded, color: Colors.white, size: 26),
-                              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                            ),
-                            const SizedBox(width: 4),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(AppLang.tr(context, 'ai_title') ?? "مساعد Gear Up", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                                Text(AppLang.tr(context, 'always_here_to_help') ?? "دائماً هنا للمساعدة", style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                              ],
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 28),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  Expanded(
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(20),
-                      itemCount: _messages.length + 1,
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+            // 🔥 استخدام Padding ديناميكي عشان الكيبورد ترفع الشاشة من غير ما تعصرها 🔥
+            body: Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: Container(
+                decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 25, spreadRadius: 5),
+                    ]
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(colors: [AppColors.primary, Color(0xFF1E3A5F)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
                             children: [
-                              Row(
+                              IconButton(
+                                icon: const Icon(Icons.menu_rounded, color: Colors.white, size: 26),
+                                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                              ),
+                              const SizedBox(width: 4),
+                              Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  CircleAvatar(
-                                    backgroundColor: AppColors.primary.withOpacity(0.1),
-                                    child: const Icon(Icons.smart_toy_outlined, color: AppColors.primary, size: 20),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(16),
-                                        decoration: BoxDecoration(
-                                          color: isDark ? const Color(0xFF252525) : Colors.white,
-                                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
-                                          borderRadius: BorderRadius.only(
-                                            topLeft: const Radius.circular(24),
-                                            topRight: const Radius.circular(24),
-                                            bottomRight: isRtl ? Radius.zero : const Radius.circular(24),
-                                            bottomLeft: isRtl ? const Radius.circular(24) : Radius.zero,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          AppLang.tr(context, 'ai_greeting') ?? "مرحباً! كيف يمكنني مساعدتك؟",
-                                          style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 14, height: 1.6),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                                  Text(AppLang.tr(context, 'ai_title') ?? "مساعد Gear Up", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                                  Text(AppLang.tr(context, 'always_here_to_help') ?? "دائماً هنا للمساعدة", style: const TextStyle(color: Colors.white70, fontSize: 12)),
                                 ],
                               ),
-                              const SizedBox(height: 32),
-
-                              if (_messages.isEmpty) ...[
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.lightbulb_outline_rounded, color: AppColors.primary, size: 20),
-                                      const SizedBox(width: 8),
-                                      Text(AppLang.tr(context, 'quick_suggestions') ?? "اقتراحات", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 14, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  child: Column(
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(child: _buildPremiumSuggestionCard(AppLang.tr(context, 'sugg_title_1') ?? "", AppLang.tr(context, 'sugg_desc_1') ?? "قارنلي بين توسان وسبورتاج", Icons.newspaper_rounded, isDark)),
-                                          const SizedBox(width: 12),
-                                          Expanded(child: _buildPremiumSuggestionCard(AppLang.tr(context, 'sugg_title_2') ?? "", AppLang.tr(context, 'sugg_desc_2') ?? "إيه أرخص عربية جديدة؟", Icons.build_circle_outlined, isDark)),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        children: [
-                                          Expanded(child: _buildPremiumSuggestionCard(AppLang.tr(context, 'sugg_title_3') ?? "", AppLang.tr(context, 'sugg_desc_3') ?? "عربيتي بتسحب بنزين، إيه الحل؟", Icons.shopping_bag_outlined, isDark)),
-                                          const SizedBox(width: 12),
-                                          Expanded(child: _buildPremiumSuggestionCard(AppLang.tr(context, 'sugg_title_4') ?? "", AppLang.tr(context, 'sugg_desc_4') ?? "إزاي أبيع عربيتي بسرعة؟", Icons.compare_arrows_rounded, isDark)),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
-                          );
-                        }
-
-                        final actualIndex = index - 1;
-                        final msg = _messages[actualIndex];
-
-                        bool isArabicMsg = RegExp(r'[\u0600-\u06FF]').hasMatch(msg.text);
-
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 20.0),
-                          child: Row(
-                            mainAxisAlignment: msg.isUser
-                                ? (isRtl ? MainAxisAlignment.start : MainAxisAlignment.end)
-                                : (isRtl ? MainAxisAlignment.end : MainAxisAlignment.start),
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              if (!msg.isUser) ...[
-                                CircleAvatar(
-                                  backgroundColor: AppColors.primary.withOpacity(0.1),
-                                  child: const Icon(Icons.smart_toy_outlined, color: AppColors.primary, size: 20),
-                                ),
-                                const SizedBox(width: 12),
-                              ],
-
-                              Flexible(
-                                child: Column(
-                                  crossAxisAlignment: msg.isUser
-                                      ? (isRtl ? CrossAxisAlignment.start : CrossAxisAlignment.end)
-                                      : (isRtl ? CrossAxisAlignment.end : CrossAxisAlignment.start),
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                      decoration: BoxDecoration(
-                                        gradient: msg.isUser ? const LinearGradient(colors: [AppColors.primary, Color(0xFF1E3A5F)]) : null,
-                                        color: msg.isUser ? null : (isDark ? const Color(0xFF252525) : Colors.white),
-                                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4))],
-                                        borderRadius: BorderRadius.only(
-                                          topLeft: const Radius.circular(24),
-                                          topRight: const Radius.circular(24),
-                                          bottomLeft: msg.isUser
-                                              ? (isRtl ? Radius.zero : const Radius.circular(24))
-                                              : (isRtl ? const Radius.circular(24) : Radius.zero),
-                                          bottomRight: msg.isUser
-                                              ? (isRtl ? const Radius.circular(24) : Radius.zero)
-                                              : (isRtl ? Radius.zero : const Radius.circular(24)),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        msg.text,
-                                        textDirection: isArabicMsg ? TextDirection.rtl : TextDirection.ltr,
-                                        style: TextStyle(
-                                            color: msg.isUser ? Colors.white : (isDark ? Colors.white : Colors.black87),
-                                            fontSize: 15,
-                                            height: 1.6
-                                        ),
-                                      ),
-                                    ),
-                                    if (msg.isUser) ...[
-                                      const SizedBox(height: 6),
-                                      GestureDetector(
-                                        onTap: () => _editMessage(actualIndex),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.edit_rounded, size: 14, color: isDark ? Colors.white54 : Colors.black45),
-                                              const SizedBox(width: 4),
-                                              Text(AppLang.tr(context, 'edit') ?? "تعديل", style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black45, fontWeight: FontWeight.bold)),
-                                            ],
-                                          ),
-                                        ),
-                                      )
-                                    ]
-                                  ],
-                                ),
-                              ),
-
-                              if (msg.isUser) ...[
-                                const SizedBox(width: 12),
-                                CircleAvatar(
-                                  backgroundColor: isDark ? const Color(0xFF333333) : const Color(0xFFE0E0E0),
-                                  child: Icon(Icons.person_outline, color: isDark ? Colors.white70 : Colors.black54, size: 20),
-                                ),
-                              ],
                             ],
                           ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  if (_isLoading)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 16.0),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundColor: AppColors.primary.withOpacity(0.1),
-                            child: const Icon(Icons.smart_toy_outlined, color: AppColors.primary, size: 20),
-                          ),
-                          const SizedBox(width: 12),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF252525) : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)),
-                                const SizedBox(width: 12),
-                                Text(AppLang.tr(context, 'ai_thinking') ?? "بفكر...", style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 12, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
+                          IconButton(
+                            icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 28),
+                            onPressed: () => Navigator.pop(context),
                           ),
                         ],
                       ),
                     ),
 
-                  Container(
-                    color: Colors.transparent,
-                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 24, top: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                              borderRadius: BorderRadius.circular(28),
-                              border: Border.all(color: isDark ? Colors.white10 : Colors.black12, width: 1),
+                    Expanded(
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(20),
+                        itemCount: _messages.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    CircleAvatar(
+                                      backgroundColor: AppColors.primary.withOpacity(0.1),
+                                      child: const Icon(Icons.smart_toy_outlined, color: AppColors.primary, size: 20),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: isDark ? const Color(0xFF252525) : Colors.white,
+                                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+                                            borderRadius: BorderRadius.only(
+                                              topLeft: const Radius.circular(24),
+                                              topRight: const Radius.circular(24),
+                                              bottomRight: isRtl ? Radius.zero : const Radius.circular(24),
+                                              bottomLeft: isRtl ? const Radius.circular(24) : Radius.zero,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            AppLang.tr(context, 'ai_greeting') ?? "مرحباً! كيف يمكنني مساعدتك؟",
+                                            style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 14, height: 1.6),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 32),
+
+                                if (_messages.isEmpty) ...[
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.lightbulb_outline_rounded, color: AppColors.primary, size: 20),
+                                        const SizedBox(width: 8),
+                                        Text(AppLang.tr(context, 'quick_suggestions') ?? "اقتراحات", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 14, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(child: _buildPremiumSuggestionCard(AppLang.tr(context, 'sugg_title_1') ?? "مقارنة", AppLang.tr(context, 'sugg_desc_1') ?? "قارنلي بين توسان وسبورتاج", Icons.newspaper_rounded, isDark)),
+                                            const SizedBox(width: 12),
+                                            Expanded(child: _buildPremiumSuggestionCard(AppLang.tr(context, 'sugg_title_2') ?? "أسعار", AppLang.tr(context, 'sugg_desc_2') ?? "إيه أرخص عربية جديدة؟", Icons.build_circle_outlined, isDark)),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            Expanded(child: _buildPremiumSuggestionCard(AppLang.tr(context, 'sugg_title_3') ?? "صيانة", AppLang.tr(context, 'sugg_desc_3') ?? "عربيتي بتسحب بنزين، إيه الحل؟", Icons.shopping_bag_outlined, isDark)),
+                                            const SizedBox(width: 12),
+                                            Expanded(child: _buildPremiumSuggestionCard(AppLang.tr(context, 'sugg_title_4') ?? "نصائح", AppLang.tr(context, 'sugg_desc_4') ?? "إزاي أبيع عربيتي بسرعة؟", Icons.compare_arrows_rounded, isDark)),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            );
+                          }
+
+                          final actualIndex = index - 1;
+                          final msg = _messages[actualIndex];
+
+                          bool isArabicMsg = RegExp(r'[\u0600-\u06FF]').hasMatch(msg.text);
+
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 20.0),
+                            child: Row(
+                              mainAxisAlignment: msg.isUser
+                                  ? (isRtl ? MainAxisAlignment.start : MainAxisAlignment.end)
+                                  : (isRtl ? MainAxisAlignment.end : MainAxisAlignment.start),
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (!msg.isUser) ...[
+                                  CircleAvatar(
+                                    backgroundColor: AppColors.primary.withOpacity(0.1),
+                                    child: const Icon(Icons.smart_toy_outlined, color: AppColors.primary, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                ],
+
+                                Flexible(
+                                  child: Column(
+                                    crossAxisAlignment: msg.isUser
+                                        ? (isRtl ? CrossAxisAlignment.start : CrossAxisAlignment.end)
+                                        : (isRtl ? CrossAxisAlignment.end : CrossAxisAlignment.start),
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                        decoration: BoxDecoration(
+                                          gradient: msg.isUser ? const LinearGradient(colors: [AppColors.primary, Color(0xFF1E3A5F)]) : null,
+                                          color: msg.isUser ? null : (isDark ? const Color(0xFF252525) : Colors.white),
+                                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4))],
+                                          borderRadius: BorderRadius.only(
+                                            topLeft: const Radius.circular(24),
+                                            topRight: const Radius.circular(24),
+                                            bottomLeft: msg.isUser
+                                                ? (isRtl ? Radius.zero : const Radius.circular(24))
+                                                : (isRtl ? const Radius.circular(24) : Radius.zero),
+                                            bottomRight: msg.isUser
+                                                ? (isRtl ? const Radius.circular(24) : Radius.zero)
+                                                : (isRtl ? Radius.zero : const Radius.circular(24)),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          msg.text,
+                                          textDirection: isArabicMsg ? TextDirection.rtl : TextDirection.ltr,
+                                          style: TextStyle(
+                                              color: msg.isUser ? Colors.white : (isDark ? Colors.white : Colors.black87),
+                                              fontSize: 15,
+                                              height: 1.6
+                                          ),
+                                        ),
+                                      ),
+                                      if (msg.isUser) ...[
+                                        const SizedBox(height: 6),
+                                        GestureDetector(
+                                          onTap: () => _editMessage(actualIndex),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.edit_rounded, size: 14, color: isDark ? Colors.white54 : Colors.black45),
+                                                const SizedBox(width: 4),
+                                                Text(AppLang.tr(context, 'edit') ?? "تعديل", style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black45, fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
+                                          ),
+                                        )
+                                      ]
+                                    ],
+                                  ),
+                                ),
+
+                                if (msg.isUser) ...[
+                                  const SizedBox(width: 12),
+                                  CircleAvatar(
+                                    backgroundColor: isDark ? const Color(0xFF333333) : const Color(0xFFE0E0E0),
+                                    child: Icon(Icons.person_outline, color: isDark ? Colors.white70 : Colors.black54, size: 20),
+                                  ),
+                                ],
+                              ],
                             ),
-                            child: TextField(
-                              controller: _messageController,
-                              focusNode: _focusNode,
-                              style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                              minLines: 1,
-                              maxLines: 5,
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (value) => _sendMessage(value),
-                              decoration: InputDecoration(
-                                hintText: AppLang.tr(context, 'type_message') ?? "اكتب رسالتك...",
-                                hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                          );
+                        },
+                      ),
+                    ),
+
+                    if (_isLoading)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 16.0),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: AppColors.primary.withOpacity(0.1),
+                              child: const Icon(Icons.smart_toy_outlined, color: AppColors.primary, size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF252525) : Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)),
+                                  const SizedBox(width: 12),
+                                  Text(AppLang.tr(context, 'ai_thinking') ?? "بفكر...", style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 12, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    Container(
+                      color: Colors.transparent,
+                      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 24, top: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                                borderRadius: BorderRadius.circular(28),
+                                border: Border.all(color: isDark ? Colors.white10 : Colors.black12, width: 1),
+                              ),
+                              child: TextField(
+                                controller: _messageController,
+                                focusNode: _focusNode,
+                                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                                minLines: 1,
+                                maxLines: 5,
+                                textInputAction: TextInputAction.send,
+                                onSubmitted: (value) => _sendMessage(value),
+                                decoration: InputDecoration(
+                                  hintText: AppLang.tr(context, 'type_message') ?? "اكتب رسالتك...",
+                                  hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        GestureDetector(
-                          onTap: () => _sendMessage(_messageController.text),
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            margin: const EdgeInsets.only(bottom: 2),
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(colors: [AppColors.primary, Color(0xFF1E3A5F)]),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                                isRtl ? Icons.send_rounded : Icons.send,
-                                color: Colors.white,
-                                size: 20
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => _sendMessage(_messageController.text),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              margin: const EdgeInsets.only(bottom: 2),
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(colors: [AppColors.primary, Color(0xFF1E3A5F)]),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                  isRtl ? Icons.send_rounded : Icons.send,
+                                  color: Colors.white,
+                                  size: 20
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           );

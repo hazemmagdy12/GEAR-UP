@@ -1,10 +1,9 @@
-import 'dart:async'; // 🔥 ضفنا الاستيراد ده عشان التايمر يشتغل
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
-import '../widgets/filters_bottom_sheet.dart';
 import '../widgets/car_card.dart';
 import '../../marketplace/cubit/market_cubit.dart';
 import '../../marketplace/cubit/market_state.dart';
@@ -21,7 +20,7 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  Timer? _debounce; // 🔥 عرفنا التايمر هنا
+  Timer? _debounce;
 
   List<String> _recentSearches = [];
   static const String _searchHistoryKey = 'gear_up_recent_searches';
@@ -85,14 +84,13 @@ class _SearchScreenState extends State<SearchScreen> {
   void dispose() {
     _searchController.dispose();
     _scrollController.dispose();
-    _debounce?.cancel(); // 🔥 متنساش تلغي التايمر هنا عشان ميعملش ميموري ليك
+    _debounce?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     final Color screenBgColor = isDark ? const Color(0xFF0A0F14) : Theme.of(context).scaffoldBackgroundColor;
 
     return Scaffold(
@@ -128,7 +126,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF161E27) : Colors.white,
-                        border: Border.all(color: isDark ? Colors.white10 : AppColors.primary),
+                        border: Border.all(color: isDark ? Colors.white10 : AppColors.primary.withOpacity(0.5)),
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
                       ),
@@ -137,59 +135,55 @@ class _SearchScreenState extends State<SearchScreen> {
                         autofocus: true,
                         textAlignVertical: TextAlignVertical.center,
                         textInputAction: TextInputAction.search,
-                        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 15),
                         onSubmitted: (value) {
-                          // لو داس Enter من الكيبورد، بيبحث فورا
                           if (_debounce?.isActive ?? false) _debounce!.cancel();
                           if (value.trim().isNotEmpty) {
                             _saveSearchTerm(value);
                             context.read<MarketCubit>().searchSpecificCar(value.trim());
                           }
                         },
-
-                        // 🔥 التعديل السحري هنا: البحث التلقائي مع الكتابة 🔥
                         onChanged: (value) {
-                          // 1. لو لسه بيكتب، الغي التايمر القديم
                           if (_debounce?.isActive ?? false) _debounce!.cancel();
 
-                          // 2. لو فضى السيرش بار، امسح النتايج فورا
                           if (value.isEmpty) {
                             context.read<MarketCubit>().clearSearch();
-                            setState(() {}); // تحديث الشاشة لإظهار السجل
                             return;
                           }
 
-                          // 3. ابدأ عداد ثانية ونص (1500 ملي ثانية)
                           _debounce = Timer(const Duration(milliseconds: 1500), () {
                             if (value.trim().isNotEmpty) {
                               _saveSearchTerm(value.trim());
                               context.read<MarketCubit>().searchSpecificCar(value.trim());
                             }
                           });
-
-                          // تحديث عشان أيقونة (X) تظهر
-                          setState(() {});
                         },
                         decoration: InputDecoration(
-                          hintText: AppLang.tr(context, 'search_cars'),
-                          hintStyle: const TextStyle(color: AppColors.textHint),
-                          prefixIcon: const Icon(Icons.search, color: AppColors.textHint),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                            icon: const Icon(Icons.close, color: AppColors.textHint, size: 20),
-                            onPressed: () {
-                              _searchController.clear();
-                              context.read<MarketCubit>().clearSearch();
-                              setState(() {});
+                          hintText: AppLang.tr(context, 'search_cars') ?? 'بحث...',
+                          hintStyle: TextStyle(color: AppColors.textHint.withOpacity(0.8), fontSize: 14),
+                          prefixIcon: const Icon(Icons.search, color: AppColors.textHint, size: 20),
+                          // 🔥 السحر هنا: زرار الـ (X) بيظهر ويختفي بذكاء من غير ما يرندر الشاشة كلها 🔥
+                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _searchController,
+                            builder: (context, value, child) {
+                              return value.text.isNotEmpty
+                                  ? IconButton(
+                                icon: const Icon(Icons.close, color: AppColors.textHint, size: 20),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  context.read<MarketCubit>().clearSearch();
+                                  FocusScope.of(context).unfocus(); // نزل الكيبورد لو داس X
+                                },
+                              )
+                                  : const SizedBox.shrink();
                             },
-                          )
-                              : null,
+                          ),
                           filled: true,
                           fillColor: Colors.transparent,
                           border: InputBorder.none,
                           focusedBorder: InputBorder.none,
                           enabledBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         ),
                       ),
                     ),
@@ -210,8 +204,12 @@ class _SearchScreenState extends State<SearchScreen> {
                   }
 
                   if (state is SearchCarsError) {
+                    // 🔥 حماية الترجمة (V2) 🔥
                     return Center(
-                      child: Text(state.error, style: const TextStyle(color: AppColors.textHint, fontSize: 16, fontWeight: FontWeight.bold)),
+                      child: Text(
+                          AppLang.tr(context, state.error) ?? state.error,
+                          style: const TextStyle(color: AppColors.textHint, fontSize: 16, fontWeight: FontWeight.bold)
+                      ),
                     );
                   }
 
@@ -230,14 +228,12 @@ class _SearchScreenState extends State<SearchScreen> {
                         }
                         final currentItem = cubit.searchResults[index];
 
-                        // 🔥 لو العنصر ده قطعة غيار، ارسم PartCard
                         if (currentItem.itemType == 'type_spare_part') {
                           return PartCard(partItem: currentItem, isPromoted: false);
-                        }
-                        // 🔥 لو عربية، ارسم CarCard العادي
-                        else {
+                        } else {
                           return CarCard(car: currentItem, isPromoted: false);
-                        }                      },
+                        }
+                      },
                     );
                   }
 
@@ -249,7 +245,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           Icon(Icons.manage_search_rounded, size: 70, color: AppColors.textHint.withOpacity(0.3)),
                           const SizedBox(height: 16),
                           Text(
-                            AppLang.tr(context, 'start_searching') ?? 'Start Searching',
+                            AppLang.tr(context, 'start_searching') ?? 'ابدأ البحث الآن',
                             style: const TextStyle(color: AppColors.textHint, fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ],
@@ -267,7 +263,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             const Icon(Icons.history, size: 16, color: AppColors.textHint),
                             const SizedBox(width: 8),
                             Text(
-                              AppLang.tr(context, 'recent_searches') ?? 'Recent Searches',
+                              AppLang.tr(context, 'recent_searches') ?? 'عمليات البحث الأخيرة',
                               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textHint),
                             ),
                           ],
@@ -275,6 +271,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
                       Expanded(
                         child: ListView.builder(
+                          physics: const BouncingScrollPhysics(),
                           itemCount: _recentSearches.length,
                           itemBuilder: (context, index) {
                             final term = _recentSearches[index];

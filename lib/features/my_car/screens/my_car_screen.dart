@@ -19,7 +19,7 @@ class MyCarScreen extends StatefulWidget {
 }
 
 class _MyCarScreenState extends State<MyCarScreen> {
-  bool get isLoggedIn => CacheHelper.getData(key: 'uid') != null;
+  bool get isLoggedIn => CacheHelper.getData(key: 'uid') != null && !CacheHelper.getData(key: 'uid').toString().startsWith('guest_');
 
   @override
   void initState() {
@@ -237,6 +237,7 @@ class _MyCarScreenState extends State<MyCarScreen> {
                     if (mileage != "0" && !mileage.contains("km")) mileage += " km";
                     List<dynamic> images = car['images'] ?? (car['imageUrl'] != null ? [car['imageUrl']] : []);
 
+                    // 🔥 تحسين الأداء: الفلترة بتتعمل هنا مرة واحدة بسرعة 🔥
                     final allCarReminders = cubit.myReminders.where((r) => r['carId'] == carId).toList();
                     final carMaintenance = cubit.myMaintenanceHistory.where((m) => m['carId'] == carId).toList();
 
@@ -269,7 +270,6 @@ class _MyCarScreenState extends State<MyCarScreen> {
                                 actionLabel: AppLang.tr(context, 'view_all') ?? 'عرض الكل',
                                 actionIcon: Icons.list_alt_rounded,
                                 isDark: isDark,
-                                // 🔥 بنبعت الـ carId لشاشة الريمايندر عشان تعرض الحاجات بتاعته بس 🔥
                                 onActionTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => RemindersScreen(carId: carId)))
                             ),
                           ),
@@ -314,7 +314,6 @@ class _MyCarScreenState extends State<MyCarScreen> {
                                 actionLabel: AppLang.tr(context, 'add_record') ?? 'إضافة سجل',
                                 actionIcon: Icons.add_chart_rounded,
                                 isDark: isDark,
-                                // 🔥 بنبعت الـ carId لدالة الصيانة 🔥
                                 onActionTap: () => _showMaintenanceDialog(isEdit: false, isDark: isDark, carId: carId)),
                           ),
                           const SizedBox(height: 16),
@@ -323,35 +322,33 @@ class _MyCarScreenState extends State<MyCarScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 20.0),
                             child: carMaintenance.isEmpty
                                 ? _buildEmptyState(isDark, AppLang.tr(context, 'no_maintenance_records') ?? "لا توجد سجلات صيانة لهذه السيارة")
-                                : Container(
-                              constraints: const BoxConstraints(maxHeight: 350),
-                              child: ListView.builder(
-                                shrinkWrap: true,
-                                physics: const BouncingScrollPhysics(),
-                                itemCount: carMaintenance.length,
-                                itemBuilder: (context, idx) {
-                                  final record = carMaintenance[idx];
-                                  return _buildMaintenanceCard(
-                                      context: context,
-                                      id: record['id'],
-                                      title: record['title'],
-                                      desc: record['desc'],
-                                      date: record['date'],
-                                      price: "EGP ${record['cost']}",
-                                      isDark: isDark,
-                                      onEditTap: () => _showMaintenanceDialog(
-                                          isEdit: true,
-                                          id: record['id'],
-                                          carId: carId,
-                                          isDark: isDark,
-                                          initialTitle: record['title'],
-                                          initialDesc: record['desc'],
-                                          initialDate: record['date'],
-                                          initialPrice: record['cost']
-                                      )
-                                  );
-                                },
-                              ),
+                                : ListView.builder(
+                              // 🔥 تحسين الأداء 2: حل مشكلة الـ Scroll والـ Constraints 🔥
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: carMaintenance.length,
+                              itemBuilder: (context, idx) {
+                                final record = carMaintenance[idx];
+                                return _buildMaintenanceCard(
+                                    context: context,
+                                    id: record['id'],
+                                    title: record['title'],
+                                    desc: record['desc'],
+                                    date: record['date'],
+                                    price: "EGP ${record['cost']}",
+                                    isDark: isDark,
+                                    onEditTap: () => _showMaintenanceDialog(
+                                        isEdit: true,
+                                        id: record['id'],
+                                        carId: carId,
+                                        isDark: isDark,
+                                        initialTitle: record['title'],
+                                        initialDesc: record['desc'],
+                                        initialDate: record['date'],
+                                        initialPrice: record['cost']
+                                    )
+                                );
+                              },
                             ),
                           ),
 
@@ -494,7 +491,12 @@ class _MyCarScreenState extends State<MyCarScreen> {
             Row(
               children: [
                 GestureDetector(
-                  onTap: () => _showCarImageFullScreen(isDark, images),
+                  onTap: () {
+                    // 🔥 تصليح لغم عرض الصور بشكل صحيح 🔥
+                    if (images.isNotEmpty) {
+                      _showCarImageFullScreen(isDark, images);
+                    }
+                  },
                   child: Container(
                     width: 110,
                     height: 100,
@@ -764,47 +766,43 @@ class _MyCarScreenState extends State<MyCarScreen> {
     );
   }
 
+  // 🔥 تحسين العرض: استخدام InteractiveViewer عشان الصورة تبقى قابلة للتكبير وبدون Overflow 🔥
   void _showCarImageFullScreen(bool isDark, List<dynamic> images) {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.92),
+      barrierColor: Colors.black.withOpacity(0.95),
       builder: (context) {
-        return GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Dialog(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            insetPadding: EdgeInsets.zero,
-            child: GestureDetector(
-              onTap: () {},
-              child: SizedBox(
-                height: 400,
-                width: double.infinity,
-                child: images.isEmpty
-                    ? Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  decoration: BoxDecoration(color: isDark ? AppColors.surfaceDark : Colors.white, borderRadius: BorderRadius.circular(24)),
-                  child: const Icon(Icons.directions_car, size: 150, color: AppColors.textHint),
-                )
-                    : PageView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: images.length,
-                  itemBuilder: (context, index) {
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 10),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: CachedNetworkImage(
-                          imageUrl: images[index].toString(),
-                          fit: BoxFit.contain,
-                          placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-                        ),
-                      ),
-                    );
-                  },
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: EdgeInsets.zero,
+          child: Stack(
+            children: [
+              PageView.builder(
+                physics: const BouncingScrollPhysics(),
+                itemCount: images.length,
+                itemBuilder: (context, index) {
+                  return InteractiveViewer(
+                    panEnabled: true,
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: CachedNetworkImage(
+                      imageUrl: images[index].toString(),
+                      fit: BoxFit.contain,
+                      placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                top: 40,
+                right: 20,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.pop(context),
                 ),
               ),
-            ),
+            ],
           ),
         );
       },

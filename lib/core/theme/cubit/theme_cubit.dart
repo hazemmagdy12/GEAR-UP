@@ -10,7 +10,6 @@ class ThemeCubit extends Cubit<ThemeMode> {
 
   void _loadTheme() {
     String? savedTheme = CacheHelper.getData(key: 'theme');
-
     if (savedTheme == 'dark') {
       emit(ThemeMode.dark);
     } else {

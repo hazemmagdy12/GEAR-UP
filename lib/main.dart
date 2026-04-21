@@ -17,6 +17,14 @@ import 'features/auth/cubit/auth_cubit.dart';
 import 'features/marketplace/cubit/market_cubit.dart';
 import 'features/intro/screens/splash_screen.dart';
 
+// 🔥 1. الدالة دي لازم تكون بره الـ main خالص عشان تشتغل والتطبيق مقفول 🔥
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // لازم نعمل Initialize للفايربيز جوه الخلفية
+  await Firebase.initializeApp();
+  debugPrint("Handling a background message: ${message.messageId}");
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -28,14 +36,15 @@ void main() async {
 
   await Firebase.initializeApp();
 
-  // الكود بتاعك القديم زي ما هو (ممتاز جداً)
+  // 🔥 2. ربط دالة الخلفية بالفايربيز 🔥
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   await Permission.notification.isDenied.then((value) {
     if (value) {
       Permission.notification.request();
     }
   });
 
-  // 🔥 ضفنا السطرين دول بس عشان الفايربيز نفسه يتأكد من الصلاحية ويسجل الجهاز 🔥
   await FirebaseMessaging.instance.requestPermission(
     alert: true,
     badge: true,
@@ -67,7 +76,6 @@ class GearUpApp extends StatelessWidget {
         BlocProvider(create: (context) => AuthCubit()),
         BlocProvider(create: (context) => MarketCubit()),
       ],
-      // 🔥 الـ BlocBuilder اللي بيلقط التغيير من السيتينج ويسمعه في التطبيق كله 🔥
       child: BlocBuilder<ThemeCubit, ThemeMode>(
         builder: (context, themeMode) {
           return BlocBuilder<LocaleCubit, Locale>(
@@ -84,7 +92,6 @@ class GearUpApp extends StatelessWidget {
                     displayColor: Colors.white,
                   ),
                 ),
-                // 🔥 الربط المباشر مع حالة الـ Cubit 🔥
                 themeMode: themeMode,
                 locale: locale,
                 supportedLocales: const [

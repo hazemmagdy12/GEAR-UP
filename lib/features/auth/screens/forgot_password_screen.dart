@@ -15,7 +15,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
-  // 🔥 دالة إرسال رابط إعادة تعيين الباسوورد 🔥
+  // 🔥 دالة إرسال رابط إعادة تعيين الباسوورد بعد التنظيف والترجمة 🔥
   Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -26,13 +26,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني'), backgroundColor: Colors.green),
+          SnackBar(
+              content: Text(AppLang.tr(context, 'reset_link_sent') ?? 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني'),
+              backgroundColor: Colors.green
+          ),
         );
         Navigator.pop(context); // نرجعه لشاشة اللوجين
       }
     } on FirebaseAuthException catch (e) {
-      String message = "حدث خطأ ما";
-      if (e.code == 'user-not-found') message = "هذا الحساب غير موجود";
+      String message = AppLang.tr(context, 'something_went_wrong') ?? "حدث خطأ ما";
+
+      if (e.code == 'user-not-found') {
+        message = AppLang.tr(context, 'user_not_found') ?? "هذا الحساب غير موجود";
+      } else if (e.code == 'invalid-email') {
+        message = AppLang.tr(context, 'invalid_email_format') ?? "صيغة البريد الإلكتروني غير صحيحة";
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
       }
@@ -99,8 +108,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               const SizedBox(height: 8),
               TextFormField(
                 controller: _emailController,
+                keyboardType: TextInputType.emailAddress, // 🔥 بيفتح كيبورد الإيميل علطول
                 style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                validator: (val) => val!.isEmpty ? "برجاء إدخال الإيميل" : null,
+                validator: (val) {
+                  // 🔥 Regex ذكي للتحقق من الإيميل قبل الإرسال 🔥
+                  if (val == null || val.isEmpty) {
+                    return AppLang.tr(context, 'email_required') ?? "برجاء إدخال الإيميل";
+                  }
+                  if (!RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+").hasMatch(val)) {
+                    return AppLang.tr(context, 'invalid_email_format') ?? "صيغة البريد الإلكتروني غير صحيحة";
+                  }
+                  return null;
+                },
                 decoration: _inputDecoration(AppLang.tr(context, 'email_hint') ?? "your@email.com", Icons.email_outlined, isDark),
               ),
               const SizedBox(height: 32),

@@ -19,7 +19,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _totalCars = 0;
   int _totalParts = 0;
   int _reportedCars = 0;
-  int _reportedReviews = 0; // 🔥 متغير جديد لعدد التعليقات المبلغ عنها
+  int _reportedReviews = 0;
 
   @override
   void initState() {
@@ -31,18 +31,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     try {
       final usersSnap = await FirebaseFirestore.instance.collection('users').count().get();
       final carsSnap = await FirebaseFirestore.instance.collection('cars').count().get();
+      // السطر ده هو اللي بيجيب عدد قطع الغيار من قاعدة البيانات
       final partsSnap = await FirebaseFirestore.instance.collection('spare_parts').count().get();
       final reportedCarsSnap = await FirebaseFirestore.instance.collection('reported_cars').where('status', isEqualTo: 'pending').count().get();
-      // 🔥 استعلام جديد لعدد التعليقات المسيئة اللي مستنية مراجعة
       final reportedReviewsSnap = await FirebaseFirestore.instance.collection('reported_reviews').where('status', isEqualTo: 'pending').count().get();
 
       if (mounted) {
         setState(() {
           _totalUsers = usersSnap.count ?? 0;
           _totalCars = carsSnap.count ?? 0;
-          _totalParts = partsSnap.count ?? 0;
+          _totalParts = partsSnap.count ?? 0; // تخزين عدد قطع الغيار
           _reportedCars = reportedCarsSnap.count ?? 0;
-          _reportedReviews = reportedReviewsSnap.count ?? 0; // تخزين العدد
+          _reportedReviews = reportedReviewsSnap.count ?? 0;
           _isLoading = false;
         });
       }
@@ -102,8 +102,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 children: [
                   _buildStatCard(AppLang.tr(context, 'users_count') ?? "المستخدمين", _totalUsers.toString(), Icons.people_alt_outlined, Colors.blue, isDark),
                   _buildStatCard(AppLang.tr(context, 'active_cars_count') ?? "السيارات النشطة", _totalCars.toString(), Icons.directions_car_outlined, Colors.green, isDark),
+
+                  // 🔥 التعديل هنا: ضفت الكارت الخاص بقطع الغيار
+                  _buildStatCard(AppLang.tr(context, 'spare_parts_count') ?? "قطع الغيار", _totalParts.toString(), Icons.build_outlined, Colors.purple, isDark),
+
                   _buildStatCard(AppLang.tr(context, 'pending_reports_count') ?? "إعلانات مبلغ عنها", _reportedCars.toString(), Icons.report_problem_outlined, Colors.redAccent, isDark),
-                  // 🔥 كارت جديد لعدد التعليقات المسيئة
                   _buildStatCard(AppLang.tr(context, 'reported_reviews_count') ?? "تعليقات مسيئة", _reportedReviews.toString(), Icons.comments_disabled_outlined, Colors.orange, isDark),
                 ],
               ),
@@ -121,7 +124,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 },
               ),
 
-              // 🔥 الزرار الجديد لمراجعة التعليقات المسيئة 🔥
               _buildAdminActionCard(
                 title: "${AppLang.tr(context, 'manage_reviews_reports') ?? 'مراجعة التعليقات'} ($_reportedReviews)",
                 subtitle: AppLang.tr(context, 'review_reported_comments_desc') ?? "مراجعة وحذف التعليقات التي تحتوي على إساءة",

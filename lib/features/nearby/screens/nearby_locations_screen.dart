@@ -76,7 +76,12 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
         return;
       }
 
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      // 🔥 حماية V2: إضافة timeLimit عشان الأبلكيشن ميهنجش لو مفيش GPS 🔥
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
+      );
+
       LatLng currentLocation = LatLng(position.latitude, position.longitude);
 
       if (mounted) {
@@ -90,7 +95,7 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
         _goToUserLocation();
       }
     } catch (e) {
-      LatLng fallback = const LatLng(30.0444, 31.2357);
+      LatLng fallback = const LatLng(30.0444, 31.2357); // Cairo fallback
       if (mounted) {
         setState(() {
           _userLocation = fallback;
@@ -123,6 +128,9 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
 
     setState(() => _isLoadingMore = true);
     await Future.delayed(const Duration(seconds: 1));
+
+    // 🔥 حماية V2: نتأكد إن الشاشة لسه موجودة قبل الـ setState 🔥
+    if (!mounted) return;
 
     _distanceMultiplier++;
     _generateSmartMockData(_userLocation!, append: true);
@@ -207,7 +215,7 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
         markerId: const MarkerId('user_loc'),
         position: _userLocation!,
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        infoWindow: InfoWindow(title: AppLang.tr(context, 'current_location')),
+        infoWindow: InfoWindow(title: AppLang.tr(context, 'current_location') ?? 'موقعي الحالي'),
       ),
     );
 
@@ -225,20 +233,22 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
     }
   }
 
+  // 🔥 حماية V2: استخدام Universal Link عشان يفتح جوجل مابز على أي نظام تشغيل (iOS/Android) 🔥
   Future<void> _openGoogleMapsDirections(double destLat, double destLng) async {
-    final String googleMapsUrl = 'google.navigation:q=$destLat,$destLng&mode=d';
-    final Uri uri = Uri.parse(googleMapsUrl);
+    final String universalMapUrl = 'https://www.google.com/maps/dir/?api=1&destination=$destLat,$destLng&travelmode=driving';
+    final Uri uri = Uri.parse(universalMapUrl);
 
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      final String webUrl = 'http://googleusercontent.com/maps.google.com/maps?saddr=${_userLocation?.latitude},${_userLocation?.longitude}&daddr=$destLat,$destLng&travelmode=driving';
-      if (await canLaunchUrl(Uri.parse(webUrl))) {
-        await launchUrl(Uri.parse(webUrl), mode: LaunchMode.externalApplication);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLang.tr(context, 'cannot_open_maps') ?? 'لا يمكن فتح الخرائط')));
         }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLang.tr(context, 'cannot_open_maps') ?? 'لا يمكن فتح الخرائط')));
       }
     }
   }
@@ -270,7 +280,6 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
                   onTap: () => Navigator.pop(context),
                   child: Container(
                     padding: const EdgeInsets.all(12),
-                    // 🔥 توحيد لون زرار القفل في الخريطة الكاملة 🔥
                     decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, shape: BoxShape.circle, boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)]),
                     child: Icon(Icons.close, color: isDark ? Colors.white : Colors.black),
                   ),
@@ -286,8 +295,6 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // 🔥 توحيد لون الخلفية الأساسية (للدارك واللايت معاً) 🔥
     final Color screenBgColor = isDark ? const Color(0xFF0A0F14) : const Color(0xFFF4F7FA);
 
     return Scaffold(
@@ -299,7 +306,6 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
             Container(
               padding: const EdgeInsets.all(20.0),
               decoration: BoxDecoration(
-                // 🔥 توحيد لون الهيدر العلوي 🔥
                 color: isDark ? const Color(0xFF0A0F14) : Colors.white,
                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
               ),
@@ -309,7 +315,6 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
                     onTap: () => Navigator.pop(context),
                     child: Container(
                       padding: const EdgeInsets.all(8),
-                      // 🔥 توحيد لون زرار الرجوع 🔥
                       decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight), borderRadius: BorderRadius.circular(12)),
                       child: Icon(Icons.arrow_back, size: 22, color: isDark ? Colors.white : AppColors.secondary),
                     ),
@@ -346,7 +351,6 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
                             ? Container(color: isDark ? const Color(0xFF161E27) : AppColors.surfaceLight, child: const Center(child: CircularProgressIndicator(color: AppColors.primary)))
                             : _locationError.isNotEmpty
                             ? Container(
-                          // 🔥 توحيد لون خلفية الخريطة قبل التحميل 🔥
                           color: isDark ? const Color(0xFF161E27) : AppColors.surfaceLight,
                           child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.location_off, size: 40, color: Colors.redAccent), const SizedBox(height: 10), Text(AppLang.tr(context, _locationError) ?? 'خطأ في الموقع', style: const TextStyle(color: AppColors.textHint, fontWeight: FontWeight.bold))])),
                         )
@@ -380,7 +384,6 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Container(
                 padding: const EdgeInsets.all(6),
-                // 🔥 توحيد لون شريط التابات (Tabs) 🔥
                 decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: isDark ? Colors.white10 : Colors.black12)),
                 child: Row(
                   children: [
@@ -447,7 +450,6 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(20),
-      // 🔥 توحيد لون كروت الأماكن للدارك مود הפخم وللأبيض في اللايت مود 🔥
       decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: isDark ? Colors.white10 : const Color(0xFFEEEEEE)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.4 : 0.05), blurRadius: 20, offset: const Offset(0, 10))]),
       child: Column(
         children: [
@@ -459,7 +461,6 @@ class _NearbyLocationsScreenState extends State<NearbyLocationsScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          // 🔥 لون زرار الاتجاهات موحد وبنفس لون الجراديانت في اللايت والدارك عشان يفضل بارز 🔥
           SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: onGetDirections, icon: const Icon(Icons.navigation_rounded, color: Colors.white, size: 20), label: Text(AppLang.tr(context, 'get_directions') ?? 'احصل على الاتجاهات', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.5)), style: ElevatedButton.styleFrom(backgroundColor: gradientStart, padding: const EdgeInsets.symmetric(vertical: 16), elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))))),
         ],
       ),

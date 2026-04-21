@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:showcaseview/showcaseview.dart'; // 🔥 تم استيراد المكتبة
 import '../../home/screens/main_layout.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/localization/app_lang.dart';
+import '../../../core/local_storage/cache_helper.dart'; // 🔥 تم استيراد الكاش عشان حماية الزائر
 import '../screens/car_details_screen.dart';
 import '../../marketplace/models/car_model.dart';
 import '../../marketplace/cubit/market_cubit.dart';
 import '../../marketplace/cubit/market_state.dart';
+
+// 🔥 تأكد إنك ضايف مسار GuestChecker الصح عندك لو حابب تطلع الـ Dialog للزائر 🔥
+// import '../../../core/utils/guest_checker.dart';
 
 class CarCard extends StatelessWidget {
   final CarModel car;
@@ -32,7 +37,9 @@ class CarCard extends StatelessWidget {
     final brand = car.make;
     final model = car.model;
     final year = car.year;
-    final price = "${AppLang.tr(context, 'currency_egp') ?? 'EGP'} ${car.price.toStringAsFixed(0)}";
+    // 🔥 السحر هنا: كود بيقسم السعر ويحط فواصل الآلاف 🔥
+    final formattedPrice = car.price.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
+    final price = "${AppLang.tr(context, 'currency_egp') ?? 'EGP'} $formattedPrice";
     final rating = car.rating > 0 ? car.rating.toStringAsFixed(1) : "0.0";
     final isTopRated = car.rating >= 4.5 && car.reviewsCount > 0;
     final imageUrl = car.images.isNotEmpty ? car.images.first : null;
@@ -90,8 +97,9 @@ class CarCard extends StatelessWidget {
                           child: Row(children: [
                             const Icon(Icons.star, color: Colors.white, size: 14),
                             const SizedBox(width: 4),
-                            Text(AppLang.tr(context, 'Top Rated') ?? 'أعلى تقييم', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))
-                          ]))) ,
+                            // 🔥 تم توحيد مفتاح الترجمة هنا 🔥
+                            Text(AppLang.tr(context, 'top_rated_badge') ?? 'أعلى تقييم', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))
+                          ]))),
 
                 Positioned(
                   top: 16, right: 16,
@@ -100,8 +108,20 @@ class CarCard extends StatelessWidget {
                       bool isSaved = cubit.isCarSaved(car.id);
                       bool isCompared = cubit.isCarInCompare(car.id);
 
-                      // 🔥 زرار القلب
-                      Widget heartBtn = _buildIconButton(icon: isSaved ? Icons.favorite : Icons.favorite_border, iconColor: isSaved ? Colors.redAccent : (isDark ? Colors.white : AppColors.secondary), isDark: isDark, onTap: () => cubit.toggleSavedCar(car));
+                      // 🔥 زرار القلب مع حماية الزائر 🔥
+                      Widget heartBtn = _buildIconButton(
+                          icon: isSaved ? Icons.favorite : Icons.favorite_border,
+                          iconColor: isSaved ? Colors.redAccent : (isDark ? Colors.white : AppColors.secondary),
+                          isDark: isDark,
+                          onTap: () {
+                            if (CacheHelper.getData(key: 'uid') == null) {
+                              // GuestChecker.showGuestDialog(context, AppLang.tr(context, 'save_ads') ?? "حفظ الإعلانات");
+                              return;
+                            }
+                            cubit.toggleSavedCar(car);
+                          }
+                      );
+
                       if (saveKey != null) {
                         heartBtn = LuxuriousShowcase(
                             showcaseKey: saveKey!,
@@ -111,7 +131,14 @@ class CarCard extends StatelessWidget {
                       }
 
                       // 🔥 زرار المقارنة
-                      Widget compareBtn = _buildIconButton(icon: Icons.compare_arrows, iconColor: isCompared ? Colors.white : (isDark ? Colors.white : AppColors.secondary), isDark: isDark, backgroundColor: isCompared ? AppColors.primary : null, onTap: () => cubit.toggleCompareCar(car, context));
+                      Widget compareBtn = _buildIconButton(
+                          icon: Icons.compare_arrows,
+                          iconColor: isCompared ? Colors.white : (isDark ? Colors.white : AppColors.secondary),
+                          isDark: isDark,
+                          backgroundColor: isCompared ? AppColors.primary : null,
+                          onTap: () => cubit.toggleCompareCar(car, context)
+                      );
+
                       if (compareKey != null) {
                         compareBtn = LuxuriousShowcase(
                             showcaseKey: compareKey!,

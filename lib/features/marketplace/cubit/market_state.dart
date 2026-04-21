@@ -1,16 +1,18 @@
 abstract class MarketState {}
 
+// ==========================================
+// 🔥 الحالات العامة (General States) 🔥
+// ==========================================
 class MarketInitial extends MarketState {}
-class CarDescriptionUpdatedState extends MarketState {}
-class MyReviewsLoadingState extends MarketState {}
-class MyReviewsLoadedState extends MarketState {}
-class AddCarLoading extends MarketState {}
-class AddCarSuccess extends MarketState {}
-class AddCarError extends MarketState {
+
+class MarketGeneralError extends MarketState {
   final String error;
-  AddCarError(this.error);
+  MarketGeneralError(this.error);
 }
 
+// ==========================================
+// 🔥 حالات السيارات والبيانات الأساسية 🔥
+// ==========================================
 class GetCarsLoading extends MarketState {}
 class GetCarsSuccess extends MarketState {}
 class GetCarsError extends MarketState {
@@ -25,7 +27,27 @@ class FetchExternalCarsError extends MarketState {
   FetchExternalCarsError(this.error);
 }
 
+class CarDescriptionUpdatedState extends MarketState {}
+
+// ==========================================
+// 🔥 حالات إضافة إعلان (سيارة/قطعة غيار) 🔥
+// ==========================================
+class AddCarLoading extends MarketState {}
+class AddCarSuccess extends MarketState {}
+class AddCarError extends MarketState {
+  final String error;
+  AddCarError(this.error);
+}
+
+class CarImagePickedSuccess extends MarketState {}
+class CarImagePickedError extends MarketState {
+  final String error;
+  CarImagePickedError(this.error);
+}
+
+// ==========================================
 // 🔥 حالات محرك البحث الذكي 🔥
+// ==========================================
 class SearchCarsLoading extends MarketState {}
 class SearchCarsLoadingMore extends MarketState {}
 class SearchCarsSuccess extends MarketState {}
@@ -34,19 +56,17 @@ class SearchCarsError extends MarketState {
   SearchCarsError(this.error);
 }
 
-// 🔥 حالات الفلتر 🔥
+// ==========================================
+// 🔥 حالات الفلتر المتقدم 🔥
+// ==========================================
 class FilterSelectionChanged extends MarketState {}
 class FilterCarsLoading extends MarketState {}
 class FilterCarsLoadingMore extends MarketState {}
 class FilterCarsSuccess extends MarketState {}
 
-class CarImagePickedSuccess extends MarketState {}
-class CarImagePickedError extends MarketState {
-  final String error;
-  CarImagePickedError(this.error);
-}
-
-// 🔥 حالات الحفظ (Saved Cars) والمقارنة (Compare) الجديدة 🔥
+// ==========================================
+// 🔥 حالات الحفظ (Saved) والمقارنة (Compare) 🔥
+// ==========================================
 class SavedCarsLoading extends MarketState {}
 class SavedCarsSuccess extends MarketState {}
 class SavedCarsError extends MarketState {
@@ -55,3 +75,9 @@ class SavedCarsError extends MarketState {
 }
 
 class CompareCarsUpdated extends MarketState {}
+
+// ==========================================
+// 🔥 حالات التقييمات (Reviews) 🔥
+// ==========================================
+class MyReviewsLoadingState extends MarketState {}
+class MyReviewsLoadedState extends MarketState {}

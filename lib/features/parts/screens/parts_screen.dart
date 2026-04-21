@@ -54,7 +54,7 @@ class _PartsScreenState extends State<PartsScreen> {
     });
 
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 50) {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 300) {
         _triggerSearchOrLoadMore(isLoadMore: true);
       }
     });
@@ -64,7 +64,6 @@ class _PartsScreenState extends State<PartsScreen> {
     final cubit = context.read<MarketCubit>();
     String finalQuery = "";
 
-    // 🔥 اللوجيك بيفضل عربي عشان الـ AI بيفهم الطلبات بالعربي أحسن في السيرفر 🔥
     if (_searchQuery.isNotEmpty && _selectedCompanies.isNotEmpty) {
       finalQuery = "${_searchQuery.trim()} متوافقة مع ${_selectedCompanies.join(' او ')}";
     } else if (_searchQuery.isNotEmpty) {
@@ -74,31 +73,38 @@ class _PartsScreenState extends State<PartsScreen> {
     }
 
     if (finalQuery.isNotEmpty) {
-      cubit.searchSpecificCar(finalQuery, isLoadMore: isLoadMore);
+      cubit.searchSpecificCar(finalQuery, isLoadMore: isLoadMore, isPart: true);
     } else if (isLoadMore) {
       cubit.loadMoreSpareParts();
     } else {
-      cubit.searchResults.clear();
-      cubit.emit(SearchCarsSuccess());
+      cubit.clearSearch(isPart: true);
     }
   }
 
   void _loadRecentSearches() {
-    setState(() { _recentSearches = CacheHelper.getStringList(key: _searchHistoryKey) ?? []; });
+    setState(() {
+      List<dynamic>? rawList = CacheHelper.getData(key: _searchHistoryKey);
+      _recentSearches = rawList?.map((e) => e.toString()).toList() ?? [];
+    });
   }
 
   Future<void> _saveSearchTerm(String term) async {
     final text = term.trim();
     if (text.isEmpty) return;
-    List<String> history = CacheHelper.getStringList(key: _searchHistoryKey) ?? [];
+
+    List<dynamic>? rawList = CacheHelper.getData(key: _searchHistoryKey);
+    List<String> history = rawList?.map((e) => e.toString()).toList() ?? [];
+
     history.remove(text); history.insert(0, text);
     if (history.length > _maxRecentSearches) history = history.sublist(0, _maxRecentSearches);
+
     await CacheHelper.saveData(key: _searchHistoryKey, value: history);
     setState(() { _recentSearches = history; });
   }
 
   Future<void> _deleteSearchTerm(String term) async {
-    List<String> history = CacheHelper.getStringList(key: _searchHistoryKey) ?? [];
+    List<dynamic>? rawList = CacheHelper.getData(key: _searchHistoryKey);
+    List<String> history = rawList?.map((e) => e.toString()).toList() ?? [];
     history.remove(term);
     await CacheHelper.saveData(key: _searchHistoryKey, value: history);
     setState(() { _recentSearches = history; });
@@ -119,6 +125,7 @@ class _PartsScreenState extends State<PartsScreen> {
       _selectedCompanies.clear(); _selectedPriceSort = 'الافتراضي';
     });
     FocusScope.of(context).unfocus();
+    context.read<MarketCubit>().clearSearch(isPart: true);
     await context.read<MarketCubit>().getSpareParts(isRefresh: true);
   }
 
@@ -145,7 +152,11 @@ class _PartsScreenState extends State<PartsScreen> {
                   Navigator.pop(ctx);
                   Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
                 },
-                child: Text(AppLang.tr(context, 'login') ?? "تسجيل الدخول"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(AppLang.tr(context, 'login') ?? "تسجيل الدخول", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -207,7 +218,7 @@ class _PartsScreenState extends State<PartsScreen> {
             bool isFilteringOrSearching = _searchQuery.isNotEmpty || _selectedCompanies.isNotEmpty;
 
             if (isFilteringOrSearching) {
-              displayParts.addAll(cubit.searchResults.where((e) => e.itemType == 'type_spare_part').toList());
+              displayParts.addAll(cubit.partsSearchResults);
 
               if (_selectedCompanies.isNotEmpty) {
                 displayParts = displayParts.where((part) {
@@ -220,7 +231,6 @@ class _PartsScreenState extends State<PartsScreen> {
               displayParts.addAll(normalParts);
             }
 
-            // 🔥 اللوجيك بيفضل بالكلمات الأصلية للبرمجة بس العرض مترجم 🔥
             if (_selectedPriceSort == 'الأقل سعراً') {
               displayParts.sort((a, b) => (a.price ?? 0).compareTo(b.price ?? 0));
             } else if (_selectedPriceSort == 'الأعلى سعراً') {
@@ -231,169 +241,179 @@ class _PartsScreenState extends State<PartsScreen> {
             final isFetchingMore = state is SearchCarsLoadingMore || cubit.isFetchingMoreParts;
             final bool showEmptyState = isFilteringOrSearching ? displayParts.isEmpty : (promotedParts.isEmpty && displayParts.isEmpty);
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(AppLang.tr(context, 'spare_parts') ?? "قطع الغيار", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-                      Text("${cubit.sparePartsList.length} ${AppLang.tr(context, 'parts_available') ?? 'قطعة متوفرة'}", style: const TextStyle(fontSize: 14, color: AppColors.textHint)),
-                    ],
-                  ),
-                ),
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Container(
-                    height: 52,
-                    decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, borderRadius: BorderRadius.circular(26)),
-                    child: TextField(
-                      controller: _searchController,
-                      style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-                      onTap: () => setState(() => _isSearchFocused = true),
-                      onChanged: (value) {
-                        setState(() { _searchQuery = value; });
-                        if (_debounce?.isActive ?? false) _debounce!.cancel();
-                        _debounce = Timer(const Duration(milliseconds: 1200), () {
-                          _triggerSearchOrLoadMore();
-                        });
-                      },
-                      onSubmitted: (value) {
-                        if (value.trim().isNotEmpty) { _saveSearchTerm(value); _triggerSearchOrLoadMore(); }
-                        setState(() => _isSearchFocused = false);
-                      },
-                      decoration: InputDecoration(
-                        hintText: AppLang.tr(context, 'search for parts...') ?? "ابحث عن قطع الغيار...",
-                        prefixIcon: const Icon(Icons.search, color: AppColors.textHint),
-                        suffixIcon: _searchQuery.isNotEmpty || _isSearchFocused ? IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.textHint, size: 20),
-                          onPressed: () {
-                            _searchController.clear(); FocusScope.of(context).unfocus();
-                            setState(() { _searchQuery = ""; _isSearchFocused = false; });
-                            _triggerSearchOrLoadMore();
-                          },
-                        ) : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            // 🔥 حماية V2: استخدام NestedScrollView لتجنب تداخل السيرش بار 🔥
+            return NestedScrollView(
+              controller: _scrollController,
+              headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+                return [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(AppLang.tr(context, 'spare_parts') ?? "قطع الغيار", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+                          Text("${cubit.sparePartsList.length} ${AppLang.tr(context, 'parts_available') ?? 'قطعة متوفرة'}", style: const TextStyle(fontSize: 14, color: AppColors.textHint)),
+                        ],
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
 
-                if (!_isSearchFocused) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Row(
-                      children: [
-                        Expanded(flex: 3, child: GestureDetector(onTap: () => _showPremiumCompanyFilter(context, isDark), child: _buildFilterButton(title: _selectedCompanies.isEmpty ? (AppLang.tr(context, 'company') ?? "الشركة") : "${AppLang.tr(context, 'companies') ?? 'الشركات'} (${_selectedCompanies.length})", isActive: _selectedCompanies.isNotEmpty, isDark: isDark))),
-                        const SizedBox(width: 8),
-                        Expanded(flex: 3, child: _buildPriceDropdownMenu(isDark: isDark)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 3,
-                          child: GestureDetector(
-                            onTap: () {
-                              if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'view_saved_parts') ?? "عرض المحفوظات"); return; }
-                              Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPartsScreen()));
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-                              decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, borderRadius: BorderRadius.circular(20)),
-                              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                const Icon(Icons.build_outlined, color: AppColors.primary, size: 18),
-                                const SizedBox(width: 4),
-                                Flexible(child: Text(AppLang.tr(context, 'saved') ?? "المحفوظة", style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis)),
-                              ]),
-                            ),
+                  // 🔥 السيرش بار بقى Sliver ثابت وشيك شبه الهوم سكرين بالظبط 🔥
+                  // 🔥 السيرش بار بتصميم نظيف ومفيش تداخل 🔥
+                  SliverAppBar(
+                    backgroundColor: screenBgColor,
+                    elevation: 0,
+                    pinned: true,
+                    floating: true,
+                    automaticallyImplyLeading: false,
+                    toolbarHeight: 68,
+                    titleSpacing: 16, // 🔥 دي بتغنينا عن الـ Padding وبتظبط المساحة صح
+                    title: Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF161E27) : Colors.white,
+                        border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight),
+                        borderRadius: BorderRadius.circular(24),
+                        // ضفنا ظل خفيف جداً بيدي عمق وشياكة للسيرش بار
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
                           ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                        onTap: () => setState(() => _isSearchFocused = true),
+                        onChanged: (value) {
+                          setState(() { _searchQuery = value; });
+                          if (_debounce?.isActive ?? false) _debounce!.cancel();
+                          _debounce = Timer(const Duration(milliseconds: 1200), () {
+                            _triggerSearchOrLoadMore();
+                          });
+                        },
+                        onSubmitted: (value) {
+                          if (value.trim().isNotEmpty) { _saveSearchTerm(value); _triggerSearchOrLoadMore(); }
+                          setState(() => _isSearchFocused = false);
+                        },
+                        decoration: InputDecoration(
+                          filled: true,                  // 🔥 السطر ده
+                          fillColor: Colors.transparent, // 🔥 والسطر ده
+                          hintText: AppLang.tr(context, 'search for parts...') ?? "ابحث عن قطع الغيار...",
+                          hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 15),
+                          prefixIcon: const Icon(Icons.search, color: AppColors.textHint, size: 22),
+                          suffixIcon: _searchQuery.isNotEmpty || _isSearchFocused ? IconButton(
+                            icon: const Icon(Icons.close, color: AppColors.textHint, size: 20),
+                            onPressed: () {
+                              _searchController.clear(); FocusScope.of(context).unfocus();
+                              setState(() { _searchQuery = ""; _isSearchFocused = false; });
+                              _triggerSearchOrLoadMore();
+                            },
+                          ) : null,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                ],
-
-                Expanded(
-                  child: _isSearchFocused && _searchQuery.isEmpty && _recentSearches.isNotEmpty
-                      ? ListView.builder(
-                    itemCount: _recentSearches.length,
-                    itemBuilder: (context, index) {
-                      final term = _recentSearches[index];
-                      return ListTile(
-                        leading: const Icon(Icons.history, color: AppColors.textHint),
-                        title: Text(term, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
-                        trailing: IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => _deleteSearchTerm(term)),
-                        onTap: () {
-                          _searchController.text = term; _saveSearchTerm(term);
-                          setState(() { _searchQuery = term; _isSearchFocused = false; });
-                          _triggerSearchOrLoadMore();
-                          FocusScope.of(context).unfocus();
-                        },
-                      );
-                    },
-                  )
-                      : RefreshIndicator(
-                    onRefresh: _handleRefresh,
-                    child: isLoading && displayParts.isEmpty
-                        ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-                        : showEmptyState
-                        ? ListView(
-                      children: [
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.5,
-                          child: Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.build_circle_outlined, size: 80, color: Colors.grey),
-                                const SizedBox(height: 20),
-                                Text(AppLang.tr(context, 'no_results_change_filter') ?? "لا توجد نتائج، قم بتغيير الفلتر أو ابحث مرة أخرى", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 16)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                        : ListView(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: [
-                        if (!isFilteringOrSearching && _selectedPriceSort == 'الافتراضي')
-                          ..._buildInterleavedFeed(context, isDark, promotedParts, displayParts)
-                        else ...[
-                          Text(AppLang.tr(context, 'search_and_filter_results') ?? "نتائج البحث والفلتر", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
-                          const SizedBox(height: 16),
-                          ...displayParts.map((part) => Column(children: [PartCard(partItem: part), const SizedBox(height: 12)])).toList(),
-                        ],
-
-                        if (isFetchingMore)
-                          const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator(color: AppColors.primary))),
-
-                        if (!isFetchingMore && displayParts.isNotEmpty && isFilteringOrSearching)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: OutlinedButton.icon(
-                              onPressed: () => _triggerSearchOrLoadMore(isLoadMore: true),
-                              icon: const Icon(Icons.refresh, color: AppColors.primary),
-                              label: Text(AppLang.tr(context, 'load_more_results') ?? "تحميل المزيد من النتائج", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                              style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: AppColors.primary),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+                  // 🔥 الفلاتر بتختفي لما اليوزر يسيرش عشان يفكس على النتيجة 🔥
+                  if (!_isSearchFocused)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: Row(
+                          children: [
+                            Expanded(flex: 3, child: GestureDetector(onTap: () => _showPremiumCompanyFilter(context, isDark), child: _buildFilterButton(title: _selectedCompanies.isEmpty ? (AppLang.tr(context, 'company') ?? "الشركة") : "${AppLang.tr(context, 'companies') ?? 'الشركات'} (${_selectedCompanies.length})", isActive: _selectedCompanies.isNotEmpty, isDark: isDark))),
+                            const SizedBox(width: 8),
+                            Expanded(flex: 3, child: _buildPriceDropdownMenu(isDark: isDark)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 3,
+                              child: GestureDetector(
+                                onTap: () {
+                                  if (CacheHelper.getData(key: 'uid') == null) { _showGuestDialog(context, AppLang.tr(context, 'view_saved_parts') ?? "عرض المحفوظات"); return; }
+                                  Navigator.push(context, MaterialPageRoute(builder: (context) => const SavedPartsScreen()));
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                                  decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, borderRadius: BorderRadius.circular(20)),
+                                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                    const Icon(Icons.build_outlined, color: AppColors.primary, size: 18),
+                                    const SizedBox(width: 4),
+                                    Flexible(child: Text(AppLang.tr(context, 'saved') ?? "المحفوظة", style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                                  ]),
+                                ),
                               ),
                             ),
-                          ),
-                        const SizedBox(height: 100),
-                      ],
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                ];
+              },
+              body: _isSearchFocused && _searchQuery.isEmpty && _recentSearches.isNotEmpty
+                  ? ListView.builder(
+                itemCount: _recentSearches.length,
+                itemBuilder: (context, index) {
+                  final term = _recentSearches[index];
+                  return ListTile(
+                    leading: const Icon(Icons.history, color: AppColors.textHint),
+                    title: Text(term, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                    trailing: IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => _deleteSearchTerm(term)),
+                    onTap: () {
+                      _searchController.text = term; _saveSearchTerm(term);
+                      setState(() { _searchQuery = term; _isSearchFocused = false; });
+                      _triggerSearchOrLoadMore();
+                      FocusScope.of(context).unfocus();
+                    },
+                  );
+                },
+              )
+                  : RefreshIndicator(
+                onRefresh: _handleRefresh,
+                child: isLoading && displayParts.isEmpty
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                    : showEmptyState
+                    ? ListView(
+                  children: [
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.5,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.build_circle_outlined, size: 80, color: Colors.grey),
+                            const SizedBox(height: 20),
+                            Text(AppLang.tr(context, 'no_results_change_filter') ?? "لا توجد نتائج، قم بتغيير الفلتر أو ابحث مرة أخرى", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 16), textAlign: TextAlign.center,),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+                    : ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    if (!isFilteringOrSearching && _selectedPriceSort == 'الافتراضي')
+                      ..._buildInterleavedFeed(context, isDark, promotedParts, displayParts)
+                    else ...[
+                      Text(AppLang.tr(context, 'search_and_filter_results') ?? "نتائج البحث والفلتر", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black87)),
+                      const SizedBox(height: 16),
+                      ...displayParts.map((part) => Column(children: [PartCard(partItem: part), const SizedBox(height: 12)])).toList(),
+                    ],
+
+
+
+                    const SizedBox(height: 100),
+                  ],
                 ),
-              ],
+              ),
             );
           },
         ),
@@ -437,10 +457,13 @@ class _PartsScreenState extends State<PartsScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
+
+                    // 🔥 حماية V2: استخدام Wrap آمن عشان ميعملش Overflow 🔥
                     Expanded(
                       child: SingleChildScrollView(
                         child: Wrap(
                           spacing: 12, runSpacing: 12,
+                          alignment: WrapAlignment.start,
                           children: _availableBrands.map((company) {
                             final isSelected = _selectedCompanies.contains(company);
                             return GestureDetector(
@@ -448,15 +471,15 @@ class _PartsScreenState extends State<PartsScreen> {
                                 setModalState(() { isSelected ? _selectedCompanies.remove(company) : _selectedCompanies.add(company); });
                                 setState(() {});
                               },
-                              child: Container(
-                                width: (MediaQuery.of(context).size.width - 40 - 12) / 2,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                                 decoration: BoxDecoration(
                                   color: isSelected ? AppColors.primary : (isDark ? const Color(0xFF1E2834) : Colors.white),
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(color: isSelected ? AppColors.primary : (isDark ? Colors.white10 : Colors.grey[300]!)),
                                 ),
-                                child: Center(child: Text(company, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold))),
+                                child: Text(company, style: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontWeight: FontWeight.bold, fontSize: 13)),
                               ),
                             );
                           }).toList(),
@@ -510,7 +533,6 @@ class _PartsScreenState extends State<PartsScreen> {
       AppLang.tr(context, 'highest_price') ?? 'الأعلى سعراً'
     ];
 
-    // 🔥 نحافظ على مفاتيح البرمجة للتحكم في اللوجيك 🔥
     final logicItems = ['الافتراضي', 'الأقل سعراً', 'الأعلى سعراً'];
 
     bool isActive = _selectedPriceSort != 'الافتراضي';

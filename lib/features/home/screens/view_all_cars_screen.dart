@@ -16,6 +16,9 @@ import '../../marketplace/cubit/market_state.dart';
 import '../../marketplace/models/car_model.dart';
 import '../../marketplace/models/news_model.dart';
 
+// 🔥 تأكد من الاستيراد ده عشان حماية الزائر في زرار החفظ 🔥
+// import '../../../core/utils/guest_checker.dart';
+
 class ViewAllCarsScreen extends StatefulWidget {
   final String title;
   const ViewAllCarsScreen({super.key, required this.title});
@@ -43,11 +46,12 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
     super.initState();
 
     Future.microtask(() {
-      final cubit = context.read<MarketCubit>();
-      _initializeList(cubit);
+      if (mounted) {
+        final cubit = context.read<MarketCubit>();
+        _initializeList(cubit);
+      }
     });
 
-    // 🔥 السكرول اللانهائي الذكي (شغال في العادي وفي السيرش) 🔥
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
         if (_searchQuery.isNotEmpty) {
@@ -118,8 +122,8 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
     bool isNewsScreen = widget.title == AppLang.tr(context, 'latest_cars_news') || widget.title == "News & Insights";
 
     if (isNewsScreen) {
-      if (!cubit.isFetchingMoreNews) cubit.fetchMoreNews();
-      setState(() { _isLoadingMoreLocal = false; });
+      if (!cubit.isFetchingMoreNews) await cubit.fetchMoreNews();
+      if (mounted) setState(() { _isLoadingMoreLocal = false; });
       return;
     }
 
@@ -128,54 +132,58 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
 
     if (availableLocally.isNotEmpty) {
       await Future.delayed(const Duration(milliseconds: 300));
-      if (mounted) { setState(() { _currentList.addAll(availableLocally.take(10)); _isLoadingMoreLocal = false; }); }
-    } else {
+      if (mounted) {
+        setState(() {
+          _currentList.addAll(availableLocally.take(10));
+          _isLoadingMoreLocal = false;
+        });
+      }
+    }
+    else {
       bool isPromotedOrTopRated = widget.title.contains('ممولة') || widget.title.contains('Promoted') || widget.title.contains('تقييم') || widget.title.contains('Rated');
 
       if (!isPromotedOrTopRated) {
         bool isCategory = widget.title.contains('جديدة') || widget.title.contains('New') || widget.title.contains('مستعملة') || widget.title.contains('Used');
+        bool isParts = widget.title.contains('قطع') || widget.title.contains('Parts');
 
-        if (isCategory && !cubit.isSearchingCategoryAPI) {
-          cubit.searchCategoryCarsFromAI("", widget.title);
-        } else if (!cubit.isFetchingExternal) {
-          cubit.fetchExternalCarsData();
+        if (isParts) {
+          await cubit.loadMoreSpareParts();
+        } else if (isCategory && !cubit.isFetchingMoreFirebase && !cubit.isFetchingExternal) {
+          await cubit.loadMoreCarsFromFirebase(widget.title);
+        } else if (!cubit.isFetchingMoreFirebase && !cubit.isFetchingExternal) {
+          await cubit.loadMoreCarsFromFirebase("سيارات");
         }
       }
-      setState(() { _isLoadingMoreLocal = false; });
+      if (mounted) setState(() { _isLoadingMoreLocal = false; });
     }
   }
 
-  // 🔥 محرك البحث الذكي المدمج الخاص بالسيارات (بيدعم التحميل اللانهائي) 🔥
   void _triggerSearchOrLoadMore({bool isLoadMore = false}) {
     final cubit = context.read<MarketCubit>();
     bool isLocalOnly = widget.title.contains('ممولة') || widget.title.contains('Promoted') || widget.title.contains('تقييم') || widget.title.contains('Rated');
 
-    // 1. لو إحنا في قسم ممول أو تقييم (بحث محلي فقط)
     if (isLocalOnly) {
       if (!isLoadMore) setState(() {});
       return;
     }
 
-    if (_searchQuery.isEmpty) return;
+    if (_searchQuery.trim().isEmpty) return;
 
-    // 2. صياغة جملة ذكية جداً للسيرفر بناءً على القسم الحالي
+    // 🔥 التعديل السحري هنا: شلنا كلمة "ماركة" اللي كانت بتجبر الذكاء الاصطناعي يهلوس 🔥
     String smartAiQuery = _searchQuery.trim();
 
     if (widget.title.contains('جديدة') || widget.title.contains('New')) {
-      smartAiQuery = "سيارات جديدة زيرو ماركة $smartAiQuery";
+      smartAiQuery = "سيارات جديدة زيرو $smartAiQuery"; // بدون كلمة ماركة
     }
     else if (widget.title.contains('مستعملة') || widget.title.contains('Used')) {
-      smartAiQuery = "سيارات مستعملة ماركة $smartAiQuery";
+      smartAiQuery = "سيارات مستعملة $smartAiQuery";
     }
     else if (widget.title.contains('اخترناها') || widget.title.contains('Curated') || widget.title.contains('for you')) {
       String usage = CacheHelper.getData(key: 'pref_carUsage') ?? 'استخدام عام';
       String budget = CacheHelper.getData(key: 'pref_budget') ?? 'مفتوحة';
-      smartAiQuery = "سيارات تناسب استخدام ($usage) بميزانية ($budget) وتطابق كلمة: $smartAiQuery";
-    } else {
-      smartAiQuery = "سيارات $smartAiQuery";
+      smartAiQuery = "سيارات تناسب ($usage) بميزانية ($budget) بحث: $smartAiQuery";
     }
 
-    // 3. إرسال الطلب للسيرفر
     if (isLoadMore) {
       cubit.searchSpecificCar(smartAiQuery, isLoadMore: true);
     } else {
@@ -183,7 +191,6 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
       cubit.searchSpecificCar(smartAiQuery);
     }
   }
-
   Future<void> _handleRefresh() async {
     setState(() {
       _isListInitialized = false; _searchQuery = ""; _searchController.clear();
@@ -276,12 +283,10 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
             bool isPromotedSection = widget.title.contains('ممولة') || widget.title.contains('Promoted');
             List<CarModel> filteredCars = [];
 
-            // 🔥 دمج فلترة السيرش (محلي + AI) مع شروط القسم الإجبارية 🔥
             if (_searchQuery.isNotEmpty) {
               final parsedData = marketCubit.parseSearchQuery(_searchQuery, isPart: isPartsScreen);
               final List<String> searchWords = parsedData['words'];
 
-              // 1. بحث في المحلي
               List<CarModel> localMatches = _currentList.where((car) {
                 final String make = car.make.toLowerCase(); final String model = car.model.toLowerCase(); final String desc = car.description.toLowerCase();
                 if (searchWords.isNotEmpty) { return searchWords.every((word) => make.contains(word) || model.contains(word) || desc.contains(word)); }
@@ -290,11 +295,9 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
 
               filteredCars.addAll(localMatches);
 
-              // 2. دمج نتايج الذكاء الاصطناعي (مع فلترة إجبارية عشان ميهيسش)
               if (!isLocalOnlyCategory && marketCubit.searchResults.isNotEmpty) {
                 var aiResults = marketCubit.searchResults.where((e) => e.itemType == (isPartsScreen ? 'type_spare_part' : 'type_car')).toList();
 
-                // 🛑 الفلترة الإجبارية (الشرطي السري) 🛑
                 if (widget.title.contains('جديدة') || widget.title.contains('New')) {
                   aiResults = aiResults.where((c) => c.condition == 'new_condition' || c.condition == 'new').toList();
                 } else if (widget.title.contains('مستعملة') || widget.title.contains('Used')) {
@@ -309,7 +312,6 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
               filteredCars = List.from(_currentList);
             }
 
-            // تطبيق الفلاتر الإضافية (السعر والماركة من الشيت) لو موجودة
             if (isPromotedSection && marketCubit.isFilterActive) {
               filteredCars = filteredCars.where((car) {
                 bool matchesBrand = marketCubit.selectedFilterBrands.isEmpty || marketCubit.selectedFilterBrands.any((brand) => car.make.toLowerCase().contains(brand.toLowerCase()));
@@ -332,20 +334,32 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
                     child: Row(
                       children: [
                         Expanded(
+                          // 🔥 التعديل السحري للسيرش بار عشان يبقى شكل واحد نظيف 🔥
                           child: Container(
-                            height: 50,
-                            decoration: BoxDecoration(color: isDark ? const Color(0xFF161E27) : Colors.white, borderRadius: BorderRadius.circular(30), border: Border.all(color: isDark ? Colors.white10 : Colors.transparent), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF161E27) : Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: isDark ? Colors.white10 : AppColors.borderLight),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0 : 0.05), blurRadius: 8, offset: const Offset(0, 3))],
+                            ),
                             child: TextField(
                               controller: _searchController,
+                              textAlignVertical: TextAlignVertical.center,
                               onTap: () => setState(() => _isSearchFocused = true),
                               onChanged: (value) {
                                 setState(() { _searchQuery = value; _isDebouncing = true; });
                                 if (_debounce?.isActive ?? false) _debounce!.cancel();
+
                                 _debounce = Timer(const Duration(milliseconds: 1200), () {
                                   if (!mounted) return;
                                   setState(() { _isDebouncing = false; });
-                                  if (_searchQuery.trim().isEmpty) { marketCubit.searchResults.clear(); }
-                                  else { _triggerSearchOrLoadMore(); }
+                                  // حماية إضافية عشان ميبعتش للسيرفر فاضي
+                                  if (_searchQuery.trim().isEmpty) {
+                                    marketCubit.searchResults.clear();
+                                  } else {
+                                    _triggerSearchOrLoadMore();
+                                  }
                                 });
                               },
                               onSubmitted: (value) {
@@ -355,10 +369,17 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
                               },
                               style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 15),
                               decoration: InputDecoration(
+                                isDense: true, // بيمنع الـ padding الداخلي الغريب
                                 hintText: "${AppLang.tr(context, 'search_in')} $displayTitle...",
-                                hintStyle: TextStyle(color: AppColors.textHint.withOpacity(0.7), fontSize: 15), prefixIcon: const Icon(Icons.search, color: AppColors.textHint, size: 22),
+                                hintStyle: TextStyle(color: AppColors.textHint.withOpacity(0.7), fontSize: 14),
+                                prefixIcon: const Icon(Icons.search, color: AppColors.textHint, size: 20),
                                 suffixIcon: _searchQuery.isNotEmpty || _isSearchFocused ? _AnimatedClearSearchButton(onTap: () { _searchController.clear(); FocusScope.of(context).unfocus(); setState(() { _searchQuery = ""; _isSearchFocused = false; _isDebouncing = false; }); marketCubit.searchResults.clear(); }) : null,
-                                border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                                filled: true,
+                                fillColor: Colors.transparent, // شفاف عشان ياخد لون الكونتينر
+                                border: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                               ),
                             ),
                           ),
@@ -369,8 +390,8 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
                           GestureDetector(
                             onTap: () { showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (context) => const FiltersBottomSheet()); },
                             child: Container(
-                              height: 50, width: 50,
-                              decoration: BoxDecoration(color: marketCubit.isFilterActive ? const Color(0xFF1A237E) : AppColors.primary, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]),
+                              height: 48, width: 48,
+                              decoration: BoxDecoration(color: marketCubit.isFilterActive ? const Color(0xFF1A237E) : AppColors.primary, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]),
                               child: Stack(alignment: Alignment.center, children: [const Icon(Icons.tune, color: Colors.white, size: 22), if (marketCubit.isFilterActive) Positioned(top: 12, right: 12, child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle)))]),
                             ),
                           ),
@@ -396,17 +417,15 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
                         itemCount: filteredCars.length + (isFetchingMoreApi || _isLoadingMoreLocal ? 1 : 0) + (!isLocalOnlyCategory && _searchQuery.isNotEmpty && !isFetchingMoreApi && filteredCars.isNotEmpty ? 1 : 0),
                         separatorBuilder: (context, index) => const SizedBox(height: 28),
                         itemBuilder: (context, index) {
-                          // إظهار اللودينج تحت
                           if (index == filteredCars.length && (isFetchingMoreApi || _isLoadingMoreLocal)) { return const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator(color: AppColors.primary))); }
 
-                          // 🔥 زرار تحميل المزيد للذكاء الاصطناعي لو النتايج مخلصتش 🔥
                           if (index == filteredCars.length && !isLocalOnlyCategory && _searchQuery.isNotEmpty && !isFetchingMoreApi) {
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 20),
                               child: OutlinedButton.icon(
                                 onPressed: () => _triggerSearchOrLoadMore(isLoadMore: true),
                                 icon: const Icon(Icons.refresh, color: AppColors.primary),
-                                label: const Text("تحميل المزيد", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                                label: Text(AppLang.tr(context, 'load_more') ?? "تحميل المزيد", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                                 style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.primary), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                               ),
                             );
@@ -514,9 +533,27 @@ class _ViewAllCarsScreenState extends State<ViewAllCarsScreen> {
                       bool isSaved = cubit.isCarSaved(car.id); bool isCompared = cubit.isCarInCompare(car.id);
                       return Column(
                         children: [
-                          _buildIconButton(icon: isSaved ? Icons.favorite : Icons.favorite_border, iconColor: isSaved ? Colors.redAccent : (isDark ? Colors.white : AppColors.secondary), isDark: isDark, onTap: () => cubit.toggleSavedCar(car)),
+                          // 🔥 حماية الزائر هنا 🔥
+                          _buildIconButton(
+                              icon: isSaved ? Icons.favorite : Icons.favorite_border,
+                              iconColor: isSaved ? Colors.redAccent : (isDark ? Colors.white : AppColors.secondary),
+                              isDark: isDark,
+                              onTap: () {
+                                if (CacheHelper.getData(key: 'uid') == null) {
+                                  // استدعي GuestChecker هنا
+                                  return;
+                                }
+                                cubit.toggleSavedCar(car);
+                              }
+                          ),
                           const SizedBox(height: 12),
-                          _buildIconButton(icon: Icons.compare_arrows, iconColor: isCompared ? Colors.white : (isDark ? Colors.white : AppColors.secondary), isDark: isDark, backgroundColor: isCompared ? AppColors.primary : null, onTap: () => cubit.toggleCompareCar(car, context)),
+                          _buildIconButton(
+                              icon: Icons.compare_arrows,
+                              iconColor: isCompared ? Colors.white : (isDark ? Colors.white : AppColors.secondary),
+                              isDark: isDark,
+                              backgroundColor: isCompared ? AppColors.primary : null,
+                              onTap: () => cubit.toggleCompareCar(car, context)
+                          ),
                         ],
                       );
                     },
