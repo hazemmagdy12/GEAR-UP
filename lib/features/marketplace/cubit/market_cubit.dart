@@ -1918,20 +1918,33 @@ class MarketCubit extends Cubit<MarketState> {
     }
   }
   // دالة حذف السيارة
+  // دالة حذف السيارة من جراج المستخدم (My Cars)
   Future<void> deleteMyVehicle(String vehicleId) async {
     try {
-      // 1. الحذف من الفايربيز
-      await _firestore.collection('cars').doc(vehicleId).delete();
+      String? uid = CacheHelper.getData(key: 'uid');
+      if (uid == null) return; // لازم يكون مسجل دخول
 
-      // 2. الحذف من اللستات المحلية عشان الشاشة تتحدث فوراً
-      carsList.removeWhere((car) => car.id == vehicleId);
-      newCarsList.removeWhere((car) => car.id == vehicleId);
-      usedCarsList.removeWhere((car) => car.id == vehicleId);
+      // 1. الحذف من الفايربيز (المسار الصحيح زي الصورة اللي بعتها)
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('my_cars')
+          .doc(vehicleId)
+          .delete();
 
-      // 3. تحديث الشاشة
+      // 2. الحذف من اللستة المحلية بتاعة "عربياتي" عشان الـ UI يتحدث فوراً
+      myCars.removeWhere((car) => car['id'] == vehicleId);
+
+      // 3. تحديث الكاش المحلي (عشان لو فتح أوفلاين متظهرش تاني)
+      await CacheHelper.saveData(key: 'offline_my_cars_$uid', value: jsonEncode(myCars));
+
+      // 4. تحديث الشاشة
       emit(MarketInitial());
+
+      debugPrint("✅ تم مسح السيارة من جراج المستخدم بنجاح");
+
     } catch (e) {
-      debugPrint("Error deleting vehicle: $e");
+      debugPrint("❌ Error deleting vehicle from my_cars: $e");
     }
   }
 }
